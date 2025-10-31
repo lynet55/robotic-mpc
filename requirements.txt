@@ -1,0 +1,6 @@
+# requirements.txt
+#Optimization
+casadi>=3.6.0
+
+# Configuration
+pyyaml>=6.0
