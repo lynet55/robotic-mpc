@@ -13,7 +13,6 @@
 - [Overview](#overview)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Project Structure](#project-structure)
 - [Contributors](#contributors)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
