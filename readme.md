@@ -61,7 +61,7 @@ python main.py --config config.yaml
 
 **Team Members:**
 - *Balin Balinov*
-- *Christino*
+- *Cristiano*
 - *Simone*
 - *Davide*
 
