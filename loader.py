@@ -20,21 +20,16 @@ class UrdfLoader:
                 str(self._urdf_file_path),
                 package_dirs=self._mesh_dir,
             )
-            print(f"URDF successfully loaded: {self._urdf_file_path}")
-            print(f"nq = {self._model.nq}, ngeoms(vis) = {self._vmodel.ngeoms}, ngeoms(col) = {self._cmodel.ngeoms}")
             self._data = self._model.createData()
 
         except FileNotFoundError as e:
             print(f"File not found: {e.filename}")
 
         except ValueError as e:
-            # Invalid URDF or missing mesh files
             print(f"Error while parsing the URDF or building the model:\n{e}")
 
         except Exception as e:
-            # Generic catch for unexpected errors (e.g., missing libraries, permission issues)
             print(f"Unexpected error while loading the model:\n{type(e).__name__}: {e}")
-
         else:
             print("Pinocchio model and data successfully created.")
 
@@ -43,4 +38,12 @@ class UrdfLoader:
         return self._model
     @property
     def data(self):
-        return self._data
+        return self._data    
+    
+    @property
+    def collision_model(self):
+        return self._cmodel
+    
+    @property
+    def visual_model(self):
+        return self._vmodel
