@@ -263,4 +263,4 @@ class SixDofRobot:
     
     @property
     def initial_state(self):
-        return self.n_dof
+        return self._z0
