@@ -1,21 +1,26 @@
 import numpy as np
 import pinocchio as pin
 from pathlib import Path
+from loader import UrdfLoader
+
 
 # This module implements the state space robot model, taking as reference the
 # ur5 6 d.o.f industrial manipulator, using different simulation approaches.
 
 class Robot:
-
+    '''
     ROOT = Path(__file__).parent
     URDF_DIR = ROOT / "ur_description/urdf"
+    '''
     
-    def __init__(self, Ts, T, Tu, z0, u_step, urdf_file_name):
+    def __init__(self, Ts:float, T, Tu, z0, u_step, urdf_loader: UrdfLoader) -> None:
         self._Ts = Ts
         self._T = T
         self._Tu = Tu
         self._z0 = z0
         self._u_step = u_step
+        self._urdf_loader = urdf_loader
+        '''
         self._urdf_file_path = Robot.URDF_DIR / urdf_file_name
         self._mesh_dir = [str(self._urdf_file_path.parent)]
 
@@ -38,7 +43,7 @@ class Robot:
 
         else:
             print("Pinocchio model and data successfully created.")
-
+    '''
     @property
     def Ts(self):
         return self._Ts
@@ -58,7 +63,7 @@ class Robot:
     @T.setter
     def T(self, new_T):
         if new_T <= 0:
-            raise ValueError("The final simulation time must be positive")
+            raise ValueError("The total simulation time must be positive")
         if not isinstance(new_T, float):
             raise TypeError(f"Expected type float, got {type(new_T).__name__}.")
         self._T = new_T
@@ -67,11 +72,11 @@ class Robot:
     def Tu(self):
         return self._Tu
     
-    @T.setter
+    @Tu.setter
     def Tu(self, new_Tu):
         if new_Tu <= 0:
             raise ValueError("The input step time must be positive")
-        if not isinstance(new_T, float):
+        if not isinstance(new_Tu, float):
             raise TypeError(f"Expected type float, got {type(new_Tu).__name__}.")
         self._Tu = new_Tu
 
@@ -82,50 +87,63 @@ class Robot:
 
     @z0.setter
     def z0(self, new_z0):
-        if not (isinstance(new_z0, np.ndarray) and new_z0.shape == (6, 1) and new_z0.dtype == float):
-            raise TypeError("Expected a NumPy column vector of shape (6,1) with dtype=float.")
+        if not (isinstance(new_z0, np.ndarray) and new_z0.shape == (12,) and new_z0.dtype == float):
+            raise TypeError("Expected a NumPy column vector of shape (12,1) with dtype=float.")
         self._z0 = new_z0
 
     @property
     def u_step(self):
         return self._u_step
 
-    def _continous_time_model(self, z, u, th):
-        # th = (w_cv1, ..., w_cv6)
-        Wcp = np.diag(th)
-        z_dot = np.zeros((12,), dtype=np.float64)
-        y = np.zeros((13,), dtype=np.float64)
-
-        z_dot[:6] = z[:6]                   # Joint positions state equations
-        z_dot[6:] = - Wcp@z[6:] + Wcp@u     # Joint speeds state equations 
-        y[:7] = self._forward_kinematics(z[:6])  # End effector pose output equations
-        y[7:] = self._diff_kinematic(z[:6],z[6:])          # End effector velocities output equations
-
-        return z, y
+    @u_step.setter
+    def u_step(self, new_u):
+        if not isinstance(new_u, float):
+            raise TypeError(f"Expected type float, got {type(new_u).__name__}.")
+        self._u_step = new_u
 
     def _forward_kinematics(self, q):
-        fid = self._model.getFrameId('ee_fixed_joint')
+        model = self._urdf_loader.model
+        data = self._urdf_loader.data
+        fee = self._urdf_loader.fee
 
-        pin.forwardKinematics(self._model, self._data, q)
-        pin.updateFramePlacements(self._model, self._data)
+        pin.forwardKinematics(model, data, q)
+        pin.updateFramePlacements(model, data)
         
-
-        R = self._data.oMf[fid].rotation
-        p = self._data.oMf[fid].translation
+        R = data.oMf[fee].rotation
+        p = data.oMf[fee].translation
 
         quat = pin.Quaternion(R).coeffs()
         
-        return np.hstack((p, quat)) # [x_e, y_e, z_e, x, y, z, w]
+        return np.hstack((p, quat))                 # [x_e, y_e, z_e, x, y, z, w]
 
+    
 
     def _diff_kinematic(self, q, qdot):
-        fid = self._model.getFrameId('ee_fixed_joint')
-        J = pin.computeFrameJacobian(self._model, self._data, q, fid, pin.ReferenceFrame.WORLD)
+        model = self._urdf_loader.model
+        data = self._urdf_loader.data
+        fee = self._urdf_loader.fee
+        
 
-        return J@qdot
+        # The WORLD frame is retrieved by Pinocchio from the urdf, where by default is set as coincident with the robot base frame
+        J = pin.computeFrameJacobian(model, data, q, fee, pin.ReferenceFrame.WORLD)
 
-    def ffd_simulation(self, th):
+        return J@qdot                                # [vx, vy, vz, wx, wy, wz]
+
+    def _continuos_time_model(self, z, u, Wcp):
+        z_dot = np.zeros((12,), dtype=np.float64)
+        y = np.zeros((13,), dtype=np.float64)
+
+        z_dot[:6] = z[6:]                           # Joint positions state equations
+        z_dot[6:] = - Wcp@z[6:] + Wcp@u             # Joint speeds state equations 
+        y[:7] = self._forward_kinematics(z[:6])     # End effector pose output equations
+        y[7:] = self._diff_kinematic(z[:6],z[6:])   # End effector velocities output equations
+
+        return z_dot, y
+
+    def ffd_simulation(self, wcp):
+        Wcp = np.diag(wcp)
         N = int(self._T/self._Ts)
+        Nu = int(self._Tu/self._Ts)
         z = np.zeros((12,N), dtype=np.float64)
         u = np.zeros((6,N), dtype=np.float64)
         y = np.zeros((13,N), dtype=np.float64)
@@ -134,17 +152,22 @@ class Robot:
         z[:,0] = self._z0
 
         for k in range (0,N-1):
-            z_dot, y_ = self._continous_time_model(z[:,k],u[:,k], th)
+            z_dot, output = self._continuos_time_model(z[:,k],u[:,k], Wcp)
             z[:,k+1] = z[:,k] + self._Ts*z_dot
-            u[:,k+1] = u[:,k]
-            y[:,k] = y_
 
-        return z, u
+            y[:,k] = output
+            u[:, k+1] = u[:, k] if (k + 1) < Nu else np.zeros((6,), dtype=np.float64)
+        
+        _, y[:, -1] = self._continuos_time_model(z[:, -1], u[:, -1], Wcp)
+
+        return z, y, u
         
 
-    def rk2_simulation(self):
+    def rk2_simulation(self, wcp):
+        Wcp = np.diag(wcp)
         N = int(self._T/self._Ts)
-        z = np.zeros((13,N), dtype=np.float64)
+        Nu = int(self._Tu/self._Ts)
+        z = np.zeros((12,N), dtype=np.float64)
         u = np.zeros((6,N), dtype=np.float64)
         y = np.zeros((13,N), dtype=np.float64)
 
@@ -152,24 +175,29 @@ class Robot:
         z[:,0] = self._z0
 
         for k in range (0,N-1):
-            z_dot, y = self._continous_time_model(z[:,k],u[:,k], th)
-            z_temp = z[:,k] + 0.5*self._Ts*z_dot
-            z[:,k+1] = z[:,k] + self._Ts*self._continous_time_model(z_temp, u[:,k], th)[1]
-            u[:,k+1] = u[:,k]
-            y[:,k] = y
+            z_dot, output = self._continuos_time_model(z[:,k],u[:,k], Wcp)
+            z_mid = z[:,k] + 0.5*self._Ts*z_dot
 
-        return z, u
+            z_dot_mid, _ = self._continuos_time_model(z_mid,u[:,k], Wcp)
+            z[:,k+1] = z[:,k] + self._Ts*z_dot_mid
 
-
+            y[:,k] = output
+            u[:, k+1] = u[:, k] if (k + 1) < Nu else np.zeros((6,), dtype=np.float64)
         
-q_0 = np.array([0,0,0,0,0,0], dtype=np.float64)
-qdot_0 = np.array([0,0,0,0,0,0], dtype=np.float64)
+        _, y[:, -1] = self._continuos_time_model(z[:, -1], u[:, -1], Wcp)
+
+        return z, y, u
+
+
+q_0 = np.array([0, 0, 0, 0, 0, 0], dtype=np.float64)
+qdot_0 = np.array([0, 0, 0, 0, 0, 0], dtype=np.float64)
+
 z_0 = np.hstack((q_0, qdot_0))
-w_cv = np.array([100,100,100,100,100,100], dtype=np.float64)
+w_cp = np.array([100,100,100,100,100,100], dtype=np.float64)
 
-
-robot = Robot(0.01,5.0,3.0,z_0,1.0,'ur5_robot.urdf')
-z, u = robot.ffd_simulation(w_cv)
+urdf = UrdfLoader('ur5_robot')
+robot = Robot(0.01,5.0,3.0,z_0,1.0,urdf)
+z, y, u = robot.ffd_simulation(w_cp)
 
 
 
