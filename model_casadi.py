@@ -254,13 +254,13 @@ class SixDofRobot:
         }
     
     @property
-    def state_dimension(self):
+    def state_dimensions(self):
         return 2 * self.n_dof
     
     @property
-    def control_dimension(self):
+    def control_dimensions(self):
         return self.n_dof
     
     @property
-    def output_dimension(self):
-        return 13  # 7 (pose) + 6 (velocity)
+    def initial_state(self):
+        return self.n_dof
