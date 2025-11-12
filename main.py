@@ -10,8 +10,8 @@ from model_casadi import SixDofRobot as six_dof_model
 def run_sim(model, total_time):
 
     time = np.linspace(0, total_time, num=total_time)
-    state = np.zeros((total_time, model.state_dimension))
-    state[0] = model._z0
+    state = np.zeros((total_time, model.state_dimensions))
+    state[0] = model.initial_state
 
     for t in range(total_time - 1):
 
@@ -23,7 +23,7 @@ def run_sim(model, total_time):
         # solver.solve()
         # optimal_control = solver.get(0, "u")
     
-        optimal_control = np.zeros(6)
+        optimal_control = np.zeros(model.control_dimensions)
         next_state = model.update(current_state, optimal_control)
         state[t + 1] = next_state
         
@@ -44,18 +44,17 @@ if __name__ == "__main__":
     qdot_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angular speeds
     robot_loader = urdf("ur5")
     
-    robot_model = six_dof_model(
+    robot = six_dof_model(
         urdf_loader=robot_loader,
         initial_state = np.hstack((q_0, qdot_0)),
         integration_method="RK2"
     )
 
     # controller = mpc(
-    #     surface = surface,
-    #     state = model.state,
-    #     control_input = model.control,
-    #     explicit_model= model.get_explicit_model(),
-    #     implisit_model= model.get_implcit_model()
+    #     # surface = surface,
+    #     state = robot.state,
+    #     control_input = robot.control,
+    #     explicit_model = robot.get_explicit_model(),
+    #     implisit_model = robot.get_implicit_model()
     # )
-
-    run_sim(robot_model, total_time = 100)
+    run_sim(robot, total_time = 100)

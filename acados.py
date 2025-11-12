@@ -21,7 +21,7 @@ class Acados:
         self.ocp.dims.N = 20
 
         self.model = self.ocp.model
-        self.model.name = 'model'
+        self.model.name = 'six_dof_robot_model'
         self.model.x = state
         self.model.xdot = x_dot
         self.model.u = control_inputs
