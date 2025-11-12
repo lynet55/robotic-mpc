@@ -47,7 +47,7 @@ if __name__ == "__main__":
     robot_model = six_dof_model(
         urdf_loader=robot_loader,
         initial_state = np.hstack((q_0, qdot_0)),
-        integration_method="RK4"
+        integration_method="RK2"
     )
 
     # controller = mpc(

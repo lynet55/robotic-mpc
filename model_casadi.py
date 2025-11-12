@@ -20,8 +20,14 @@ class SixDofRobot:
         # Get the number of degrees of freedom
         self.n_dof = self._model.nq
         
-        # Get end-effector frame ID
-        self._ee_frame_id = self._model.getFrameId('ee_fixed_joint')
+        # Get end-effector frame ID from both models
+        # Use 'tool0' as the end-effector frame (standard UR5 frame)
+        self._ee_frame_id = self._model.getFrameId('tool0')
+        self._cee_frame_id = self._cmodel.getFrameId('tool0')
+        
+        # Check if frame ID is valid
+        if self._ee_frame_id >= self._model.nframes:
+            raise ValueError(f"Frame 'tool0' not found in model. Available frames: {[self._model.frames[i].name for i in range(self._model.nframes)]}")
         
         # Parameters for velocity control (diagonal damping matrix)
         if th is None:
@@ -61,12 +67,14 @@ class SixDofRobot:
         q_sym = ca.SX.sym('q', self.n_dof)
         q_dot_sym = ca.SX.sym('q_dot', self.n_dof)
         
-        # Forward kinematics using CasADi Pinocchio
+        # Forward kinematics using CasADi Pinocchio (also updates joint placements)
         cpin.forwardKinematics(self._cmodel, self._cdata, q_sym)
-        cpin.updateFramePlacements(self._cmodel, self._cdata)
         
-        # Extract end-effector pose
-        ee_transform = self._cdata.oMf[self._ee_frame_id]
+        # Update all frame placements (including end-effector)
+        cpin.framesForwardKinematics(self._cmodel, self._cdata, q_sym)
+        
+        # Get end-effector frame placement from data (use CasADi model frame ID)
+        ee_transform = self._cdata.oMf[self._cee_frame_id]
         ee_position = ee_transform.translation  # 3D position (CasADi expression)
         ee_rotation = ee_transform.rotation     # 3x3 rotation matrix (CasADi expression)
         
@@ -83,7 +91,7 @@ class SixDofRobot:
         
         # Differential kinematics using CasADi Pinocchio
         J = cpin.computeFrameJacobian(self._cmodel, self._cdata, q_sym,
-                                       self._ee_frame_id, pin.ReferenceFrame.WORLD)
+                                       self._cee_frame_id, pin.ReferenceFrame.WORLD)
         ee_velocity = J @ q_dot_sym
         
         self.dk_casadi = ca.Function('differential_kinematics',
