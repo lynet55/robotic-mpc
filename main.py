@@ -3,21 +3,35 @@ import numpy as np
 
 from acados import Acados as mpc
 from loader import UrdfLoader as urdf
-from model import SixDofRobot as six_dof_model
-
-
+# from model import SixDofRobot as six_dof_model
+from model_casadi import SixDofRobot as six_dof_model
 
 
 def run_sim(model, total_time):
-    time = np.linspace(0, total_time, num=total_time)
-    for t in range(total_time):
-        q1, q2, q3, q4, q5, q6, = model.update(t)
 
-        # solver.set(0, 'lbx', x_current)
-        # solver.set(0, 'ubx', x_current)
+    time = np.linspace(0, total_time, num=total_time)
+    state = np.zeros((total_time, model.state_dimension))
+    state[0] = model._z0
+
+    for t in range(total_time - 1):
+
+        current_state = state[t]
+
+        # solver.set(0, 'lbx', current_state)
+        # solver.set(0, 'ubx', current_state)
         
         # solver.solve()
-        # u_opt = solver.get(0, "u")
+        # optimal_control = solver.get(0, "u")
+    
+        optimal_control = np.zeros(6)
+        next_state = model.update(current_state, optimal_control)
+        state[t + 1] = next_state
+        
+        q = next_state[:6]  # positions
+        q_dot = next_state[6:]  # velocities
+
+        print(f"Time {t}: q = {q}, q_dot = {q_dot}")
+
 
   
 
