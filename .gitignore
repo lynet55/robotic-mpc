@@ -1,3 +1,5 @@
 acados
 __pycache__
 .vscode
+c_generated_code
+run.sh
