@@ -33,7 +33,7 @@ def run_sim(scene, model, solver, total_time):
         current_q = q[t]
         current_q_dot = q_dot[t]
         
-        # Set initial state constraint: [q, q_dot]
+        # Set current constraint: [q, q_dot]
         current_state = np.concatenate((current_q, current_q_dot))
         solver.set(0, 'lbx', current_state)
         solver.set(0, 'ubx', current_state)
@@ -43,21 +43,15 @@ def run_sim(scene, model, solver, total_time):
 
         # Update the full state using the integrator
         next_state = model.update(current_state, optimal_control)
-        
-        # Extract position and velocity from the integrated state
-        q[t + 1] = next_state[:model.n_dof]
-        q_dot[t + 1] = next_state[model.n_dof:]
-        
-        # Compute end-effector kinematics (flatten to 1D arrays)
-        end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
-        end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
 
-        q1 = math.sin(t * 0.05)
-        q2 = math.cos(t * 0.05) * 0.5
-        q3 = math.cos(t * 0.05) * 0.8
-        q4 = math.sin(t * 0.05)
-        q5 = math.cos(t * 0.05) * 0.5
-        q6 = math.cos(t * 0.2) * 0.8
+        q1 = next_state[0]
+        q2 = next_state[1]
+        q3 = next_state[2]
+        q4 = next_state[3]
+        q5 = next_state[4]
+        q6 = next_state[5]
+
+        print(q)
 
         scene.set_joint_angles({
             "shoulder_pan_joint": q1,
@@ -67,6 +61,14 @@ def run_sim(scene, model, solver, total_time):
             "wrist_2_joint": q5,
             "wrist_3_joint": q6
         })
+
+        # Extract position and velocity from the integrated state
+        q[t + 1] = next_state[:model.n_dof]
+        q_dot[t + 1] = next_state[model.n_dof:]
+        
+        # Compute end-effector kinematics (flatten to 1D arrays)
+        end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
+        end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
         
         # Print progress every 10 steps
         if t % 10 == 0:
@@ -82,7 +84,9 @@ if __name__ == "__main__":
 
     x = ca.SX.sym("x")
     y = ca.SX.sym("y")
-    quadratic_surface = 2*x**2 + 2*y**2 + 2*x*y + 2*x + 2*y + 2
+    a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
+    quadratic_surface = a*x**2 + b*y**2 + c*x*y + d*x + e*y + f
+
 
     q_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angles
     qdot_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angular speeds
@@ -116,4 +120,4 @@ if __name__ == "__main__":
         orientation_rpy=(0.9, 0.0, 0.4),    # optional roll, pitch, yaw (rad)
     )
 
-    run_sim(scene, robot, mpc.solver, total_time = 100)
+    run_sim(scene, robot, mpc.solver, total_time = 10000)
