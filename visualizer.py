@@ -20,10 +20,16 @@ class MeshCatVisualizer:
             urdf_loader.collision_model,
             urdf_loader.visual_model
         )
-        self._viz.initViewer(open=True)
+        self._viz.initViewer(open=False)
         self._viz.loadViewerModel()
         self._viz.display(self._q)
+        
+        # Hide background by default
+        self._viz.viewer["/Background"].set_property("visible", False)
 
+    def jupyter_cell(self):
+        """Return the Jupyter widget for inline rendering."""
+        return self._viz.viewer.jupyter_cell()
 
     def set_joint_angles(self, angles):
         for joint_name, angle in angles.items():
