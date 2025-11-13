@@ -1,13 +1,15 @@
 import casadi as ca
 import numpy as np
+import math
 
 from acados import MPC as model_predictive_control
 from loader import UrdfLoader as urdf
+from visualizer import MeshCatVisualizer as robot_visualizer
 # from model import SixDofRobot as six_dof_model
 from model_casadi import SixDofRobot as six_dof_model
 
 
-def run_sim(model, solver, total_time):
+def run_sim(scene, model, solver, total_time):
 
     time = np.linspace(0, total_time, num=total_time)
     q = np.zeros((total_time, model.n_dof)) # joint positions
@@ -49,6 +51,22 @@ def run_sim(model, solver, total_time):
         # Compute end-effector kinematics (flatten to 1D arrays)
         end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
         end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
+
+        q1 = math.sin(t * 0.05)
+        q2 = math.cos(t * 0.05) * 0.5
+        q3 = math.cos(t * 0.05) * 0.8
+        q4 = math.sin(t * 0.05)
+        q5 = math.cos(t * 0.05) * 0.5
+        q6 = math.cos(t * 0.2) * 0.8
+
+        scene.set_joint_angles({
+            "shoulder_pan_joint": q1,
+            "shoulder_lift_joint": q2,
+            "elbow_joint": q3,
+            "wrist_1_joint": q4,
+            "wrist_2_joint": q5,
+            "wrist_3_joint": q6
+        })
         
         # Print progress every 10 steps
         if t % 10 == 0:
@@ -69,6 +87,7 @@ if __name__ == "__main__":
     q_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angles
     qdot_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angular speeds
     robot_loader = urdf("ur5")
+    scene = robot_visualizer(robot_loader)
     
     robot = six_dof_model(
         urdf_loader=robot_loader,
@@ -84,4 +103,17 @@ if __name__ == "__main__":
         forward_kinematics=robot.fk_casadi,
         differential_kinematics=robot.dk_casadi,
     )
-    run_sim(robot, mpc.solver, total_time = 100)
+
+    scene.add_surface_from_casadi(
+        quadratic_surface, x, y,
+        x_limits=(-0.5, 0.5),
+        y_limits=(-0.3, 0.3),
+        resolution=80,
+        path="surfaces/quadratic_surface",
+        color=0x3399FF,
+        opacity=0.6,    
+        origin=(-0.5, 1.5, 0.2),             # set position here
+        orientation_rpy=(0.9, 0.0, 0.4),    # optional roll, pitch, yaw (rad)
+    )
+
+    run_sim(scene, robot, mpc.solver, total_time = 100)
