@@ -3,3 +3,4 @@ __pycache__
 .vscode
 c_generated_code
 run.sh
+acados_ocp.json
