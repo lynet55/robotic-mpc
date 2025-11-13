@@ -37,7 +37,8 @@ class SixDofRobot:
         # Define CasADi symbolic variables
         self.state = ca.SX.sym('x', 2 * self.n_dof)  # [q, q_dot]
         self.control = ca.SX.sym('u', self.n_dof)    # control input (velocity commands)
-        self.params = ca.SX.sym('th', self.n_dof)    # parameters (damping coefficients)
+        # Store damping coefficients as numeric constants (not symbolic)
+        self._th_numeric = self._th
         
         # Create CasADi functions for Pinocchio operations
         self._setup_casadi_functions()
@@ -127,20 +128,21 @@ class SixDofRobot:
     
     def _generate_dynamics_model(self):
         """
-        Create the ODE representation: dx/dt = f(x, u, th)
+        Create the ODE representation: dx/dt = f(x, u)
         
         Dynamics model:
         q_dot = dq/dt (velocity is derivative of position)
         dq_dot/dt = -diag(th) @ q_dot + diag(th) @ u
         
         This is a first-order velocity control model with damping.
+        The damping coefficients (th) are constant numeric values.
         """
         # Split state into position and velocity
         q = self.state[:self.n_dof]
         q_dot = self.state[self.n_dof:]
         
-        # Diagonal damping matrix from parameters
-        Wcp = ca.diag(self.params)
+        # Diagonal damping matrix from numeric constant parameters
+        Wcp = ca.diag(self._th_numeric)
         
         # State derivatives
         q_dot_derivative = q_dot  # dq/dt = q_dot
@@ -149,10 +151,10 @@ class SixDofRobot:
         # State derivative: [q_dot, q_ddot]
         state_dot = ca.vertcat(q_dot_derivative, q_ddot)
         
-        # Define ODE structure
+        # Define ODE structure (only state and control as inputs)
         ode = {
             'x': self.state,      # state
-            'p': ca.vertcat(self.control, self.params),  # parameters (control input + params)
+            'p': self.control,    # parameters (control input only)
             'ode': state_dot      # dx/dt
         }
 
@@ -172,28 +174,22 @@ class SixDofRobot:
         
         return integrator
     
-    def update(self, state, control=None, params=None):
+    def update(self, state, control=None):
         """
         Integrate the system forward by one timestep using CasADi integrator
         
         Args:
             state: Current state [q, q_dot] as numpy array
             control: Control input (velocity commands). If None, uses zeros.
-            params: Parameters (damping coefficients). If None, uses default.
         
         Returns:
             new_state: Integrated state as numpy array
         """
         if control is None:
             control = np.zeros(self.n_dof)
-        if params is None:
-            params = self._th
         
-        # Combine control and parameters
-        p_combined = np.concatenate([control, params])
-        
-        # Call integrator (timestep is fixed at initialization)
-        result = self._integrator(x0=state, p=p_combined)
+        # Call integrator with control as parameter (timestep is fixed at initialization)
+        result = self._integrator(x0=state, p=control)
         
         # Extract and return new state
         new_state = np.array(result['xf']).flatten()
@@ -237,7 +233,6 @@ class SixDofRobot:
         return {
             'state': self.state,
             'control': self.control,
-            'params': self.params,
             'ode': self.ode['ode'],
             'output': output
         }
@@ -249,7 +244,6 @@ class SixDofRobot:
         return {
             'state': self.state,
             'control': self.control,
-            'params': self.params,
             'residual': residual
         }
     
