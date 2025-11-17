@@ -1,4 +1,6 @@
 __pycache__/
 .vscode/
 acados/
-ur_description/
+notes.txt
+sim_to_real.py
+MuJoCo_dataset/
