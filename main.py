@@ -1,7 +1,9 @@
+
+from turtle import delay
 import casadi as ca
 import numpy as np
 import math
-
+import time
 from acados import MPC as model_predictive_control
 from loader import UrdfLoader as urdf
 from visualizer import MeshCatVisualizer as robot_visualizer
@@ -9,9 +11,25 @@ from visualizer import MeshCatVisualizer as robot_visualizer
 from model_casadi import SixDofRobot as six_dof_model
 
 
-def run_sim(scene, model, solver, total_time):
+def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
+    """
+    Run the closed-loop simulation.
 
-    time = np.linspace(0, total_time, num=total_time)
+    Parameters
+    ----------
+    scene : MeshCatVisualizer
+        Visualizer instance used to render the robot.
+    model : SixDofRobot
+        Robot model providing dynamics and kinematics.
+    solver :
+        acados OCP solver instance.
+    total_time : int
+        Number of control steps to simulate.
+    delay_time : float, optional
+        Delay time between control steps.
+    """
+
+    # t = np.linspace(0, total_time, num=total_time)
     q = np.zeros((total_time, model.n_dof)) # joint positions
     q_dot = np.zeros((total_time, model.n_dof)) # joint velocities
 
@@ -32,6 +50,8 @@ def run_sim(scene, model, solver, total_time):
 
         current_q = q[t]
         current_q_dot = q_dot[t]
+
+        q_dot[3] = 1.0 + 2.0 * 2
         
         # Set current constraint: [q, q_dot]
         current_state = np.concatenate((current_q, current_q_dot))
@@ -71,11 +91,9 @@ def run_sim(scene, model, solver, total_time):
         # Compute end-effector kinematics (flatten to 1D arrays)
         end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
         end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
-        
-        # Print progress every 10 steps
-        # if t % 10 == 0:
-        #     ee_pos = end_effector_pose[t + 1][:3]
-        #     print(f"Step {t}: EE position = [{ee_pos[0]:.4f}, {ee_pos[1]:.4f}, {ee_pos[2]:.4f}], status = {status}")
+
+
+        time.sleep(delay_time)
     
     print("\nSimulation complete!")
     print(f"Final end-effector position: {end_effector_pose[-1][:3]}")
@@ -89,9 +107,6 @@ if __name__ == "__main__":
     a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
     quadratic_surface = a*x**2 + b*y**2 + c*x*y + d*x + e*y + f
 
-
-    
-
     joint_range = [-2*np.pi, 2*np.pi]
     joint_limits = np.array([joint_range, joint_range, joint_range, joint_range, joint_range, joint_range])
     q_0 = np.array([
@@ -99,7 +114,7 @@ if __name__ == "__main__":
         for i in range(6)
     ], dtype=np.float64)  # Random initial angles
     
-    qdot_0 = np.array([2,2,0,0,0,5], dtype=np.float64) #Initial angular speeds
+    qdot_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angular speeds
     
     print(f"Random initial joint angles (rad): {q_0}")
     print(f"Random initial joint angles (deg): {np.rad2deg(q_0)}")
@@ -143,4 +158,10 @@ if __name__ == "__main__":
         orientation_rpy=(0.9, 0.0, 0.4),    # optional roll, pitch, yaw (rad)
     )
 
-    run_sim(scene, robot, mpc.solver, total_time = 10000)
+    run_sim(
+        scene,
+        robot,
+        mpc.solver,
+        total_time=100000,
+        delay_time = 0.01,
+    )
