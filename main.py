@@ -51,7 +51,6 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
         current_q = q[t]
         current_q_dot = q_dot[t]
 
-        q_dot[3] = 1.0 + 2.0 * 2
         
         # Set current constraint: [q, q_dot]
         current_state = np.concatenate((current_q, current_q_dot))
@@ -112,12 +111,10 @@ if __name__ == "__main__":
     q_0 = np.array([
         np.random.uniform(joint_limits[i, 0], joint_limits[i, 1]) 
         for i in range(6)
-    ], dtype=np.float64)  # Random initial angles
+    ], dtype=np.float64)  
     
-    qdot_0 = np.array([0,0,0,0,0,0], dtype=np.float64) #Initial angular speeds
-    
-    print(f"Random initial joint angles (rad): {q_0}")
-    print(f"Random initial joint angles (deg): {np.rad2deg(q_0)}")
+    qdot_0 = np.array([2,2,0,0,0,5], dtype=np.float64) #Initial angular speeds
+
     robot_loader = urdf("ur5")
     scene = robot_visualizer(robot_loader)
     

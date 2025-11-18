@@ -246,7 +246,6 @@ class SixDofRobot:
             'control': self.control,
             'residual': residual
         }
-    
     @property
     def state_dimensions(self):
         return 2 * self.n_dof
