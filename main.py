@@ -42,6 +42,9 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
     end_effector_pose[0] = np.array(model.forward_kinematics(q[0])).flatten()
     end_effector_velocity[0] = np.array(model.differential_kinematics(q[0], q_dot[0])).flatten()
     
+    # Initialize trajectory tracking
+    trajectory_points = [end_effector_pose[0][:3]]
+    
     print(f"Starting simulation for {total_time} steps...")
     print(f"Initial end-effector position: {end_effector_pose[0][:3]}")
     
@@ -91,6 +94,10 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
         end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
         end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
 
+        # Update trajectory line every 10 steps for performance
+        if (t + 1) % 10 == 0:
+            trajectory_points.append(end_effector_pose[t + 1][:3])
+            scene.update_line("lines/trajectory", points=np.array(trajectory_points))
 
         time.sleep(delay_time)
     
@@ -155,6 +162,11 @@ if __name__ == "__main__":
         orientation_rpy=(0.9, 0.0, 0.4),    # optional roll, pitch, yaw (rad)
     )
 
+    # Initialize trajectory line for end-effector tracking
+    initial_ee_pos = np.array(robot.forward_kinematics(q_0)).flatten()[:3]
+    trajectory_points = np.array([initial_ee_pos])
+    scene.add_line(trajectory_points.reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
+    
     run_sim(
         scene,
         robot,
