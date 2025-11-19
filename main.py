@@ -147,25 +147,27 @@ if __name__ == "__main__":
         surface_orientation_rpy=surface_orientation_rpy,
         desired_offset=desired_offset,
     )
+    surface_x_limits = (-0.5, 0.5)
+    surface_y_limits = (-0.3, 0.3)
+    surface_origin = np.array([-0.5, 1.5, 0.2])
+    surface_orientation = np.array([0.9, 0.0, 0.4])
 
     scene.add_surface_from_casadi(
         quadratic_surface, x, y,
-        # x_limits=(-0.5, 0.5),
-        # y_limits=(-0.3, 0.3),
-        x_limits=(-5, 0.5),
-        y_limits=(-3, 0.3),
+        x_limits=surface_x_limits,
+        y_limits=surface_y_limits,
         resolution=80,
         path="surfaces/quadratic_surface",
         color=0x3399FF,
         opacity=0.6,    
-        origin=(-0.5, 1.5, 0.2),             # set position here
-        orientation_rpy=(0.9, 0.0, 0.4),    # optional roll, pitch, yaw (rad)
+        origin=surface_origin,             # set position here
+        orientation_rpy=surface_orientation,    # optional roll, pitch, yaw (rad)
     )
 
     # Initialize trajectory line for end-effector tracking
     initial_ee_pos = np.array(robot.forward_kinematics(q_0)).flatten()[:3]
     trajectory_points = np.array([initial_ee_pos])
-    scene.add_point([1.0, 0.5, 0.3], path="points/target", color=0xFF0000, radius=0.03)
+    scene.add_point(np.array([1.0, 0.5, 0.3]), path="points/target", color=0xFF0000, radius=0.03)
     scene.add_line(trajectory_points.reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
     
     run_sim(

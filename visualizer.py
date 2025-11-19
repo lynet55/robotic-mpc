@@ -56,7 +56,7 @@ class MeshCatVisualizer:
         path="surfaces/quadratic",
         color=0x3399FF,
         opacity=0.6,
-        origin=(0.0, 0.0, 0.0),
+        origin=None,
         orientation_rpy=None,
     ):
         """
@@ -70,11 +70,22 @@ class MeshCatVisualizer:
         - path: MeshCat path where the surface will be inserted (e.g., 'surfaces/my_surface')
         - color: RGB hex integer (e.g., 0x3399FF)
         - opacity: 0.0-1.0
-        - origin: (x, y, z) world translation of the surface origin
-        - orientation_rpy: optional (roll, pitch, yaw) in radians for world orientation
+        - origin: numpy array [x, y, z] for world translation of the surface origin
+        - orientation_rpy: optional numpy array [roll, pitch, yaw] in radians for world orientation
         """
         if resolution < 2:
             raise ValueError("resolution must be >= 2")
+        
+        # Validate origin is a numpy array
+        if origin is None:
+            origin = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        elif not isinstance(origin, np.ndarray) or origin.shape != (3,):
+            raise TypeError("origin must be a numpy array with shape (3,)")
+        
+        # Validate orientation_rpy is a numpy array if provided
+        if orientation_rpy is not None:
+            if not isinstance(orientation_rpy, np.ndarray) or orientation_rpy.shape != (3,):
+                raise TypeError("orientation_rpy must be a numpy array with shape (3,)")
         
         # Build callable CasADi function f(x, y) -> z
         f = ca.Function("surface", [x_symbol, y_symbol], [expr])
@@ -126,7 +137,7 @@ class MeshCatVisualizer:
         try:
             T = tf.translation_matrix([float(origin[0]), float(origin[1]), float(origin[2])])
             if orientation_rpy is not None:
-                roll, pitch, yaw = map(float, orientation_rpy)
+                roll, pitch, yaw = float(orientation_rpy[0]), float(orientation_rpy[1]), float(orientation_rpy[2])
                 R = tf.euler_matrix(roll, pitch, yaw)
                 T = T @ R
             node.set_transform(T)
@@ -139,14 +150,13 @@ class MeshCatVisualizer:
         Add a line to the visualization.
         
         Parameters
-        - points: Nx3 numpy array or list of 3D points defining the line segments
+        - points: Nx3 numpy array of 3D points defining the line segments
         - path: MeshCat path where the line will be inserted (e.g., 'lines/trajectory')
         - color: RGB hex integer (e.g., 0xFF0000 for red)
         - line_width: width of the line
         """
-        points = np.asarray(points, dtype=np.float32)
-        if points.ndim != 2 or points.shape[1] != 3:
-            raise ValueError("points must be an Nx3 array")
+        if not isinstance(points, np.ndarray) or points.ndim != 2 or points.shape[1] != 3:
+            raise TypeError("points must be a numpy array with shape (N, 3)")
         
         # Store line data for later updates
         self._lines[path] = {
@@ -174,7 +184,7 @@ class MeshCatVisualizer:
         
         Parameters
         - path: MeshCat path of the line to update
-        - points: optional Nx3 numpy array or list of new 3D points
+        - points: optional Nx3 numpy array of new 3D points
         - color: optional new RGB hex integer
         - line_width: optional new line width
         """
@@ -183,9 +193,8 @@ class MeshCatVisualizer:
         
         # Update stored data
         if points is not None:
-            points = np.asarray(points, dtype=np.float32)
-            if points.ndim != 2 or points.shape[1] != 3:
-                raise ValueError("points must be an Nx3 array")
+            if not isinstance(points, np.ndarray) or points.ndim != 2 or points.shape[1] != 3:
+                raise TypeError("points must be a numpy array with shape (N, 3)")
             self._lines[path]['points'] = points.copy()
         
         if color is not None:
@@ -218,15 +227,14 @@ class MeshCatVisualizer:
         Add a point (sphere) to the visualization.
         
         Parameters
-        - position: 3-element array or list [x, y, z] specifying the point location
+        - position: numpy array [x, y, z] specifying the point location
         - path: MeshCat path where the point will be inserted (e.g., 'points/target')
         - color: RGB hex integer (e.g., 0xFF0000 for red)
         - radius: radius of the sphere representing the point
         - opacity: opacity of the point (0.0-1.0)
         """
-        position = np.asarray(position, dtype=np.float32)
-        if position.shape != (3,):
-            raise ValueError("position must be a 3-element array [x, y, z]")
+        if not isinstance(position, np.ndarray) or position.shape != (3,):
+            raise TypeError("position must be a numpy array with shape (3,)")
         
         # Create sphere geometry and material
         geom = g.Sphere(float(radius))
