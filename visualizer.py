@@ -254,3 +254,170 @@ class MeshCatVisualizer:
         # Set position
         T = tf.translation_matrix([float(position[0]), float(position[1]), float(position[2])])
         node.set_transform(T)
+
+    def add_triad(self, position, orientation_rpy=None, path="frames/triad", scale=0.1, line_width=3.0):
+        """
+        Add a coordinate frame triad (X, Y, Z axes) to the visualization.
+        
+        Parameters
+        - position: numpy array [x, y, z] specifying the triad origin
+        - orientation_rpy: optional numpy array [roll, pitch, yaw] in radians for triad orientation
+        - path: MeshCat path where the triad will be inserted (e.g., 'frames/surface_origin')
+        - scale: length of each axis arrow
+        - line_width: width of the axis lines
+        """
+        if not isinstance(position, np.ndarray) or position.shape != (3,):
+            raise TypeError("position must be a numpy array with shape (3,)")
+        
+        if orientation_rpy is not None:
+            if not isinstance(orientation_rpy, np.ndarray) or orientation_rpy.shape != (3,):
+                raise TypeError("orientation_rpy must be a numpy array with shape (3,)")
+        
+        # Define axis colors: X=red, Y=green, Z=blue
+        axes_config = [
+            ('x', np.array([scale, 0.0, 0.0]), 0xFF0000),
+            ('y', np.array([0.0, scale, 0.0]), 0x00FF00),
+            ('z', np.array([0.0, 0.0, scale]), 0x0000FF),
+        ]
+        
+        for axis_name, axis_direction, color in axes_config:
+            # Create line from origin to axis endpoint
+            points = np.array([[0.0, 0.0, 0.0], axis_direction], dtype=np.float32)
+            
+            geom = g.Line(
+                g.PointsGeometry(points.T),
+                g.LineBasicMaterial(color=int(color), linewidth=float(line_width))
+            )
+            
+            # Resolve MeshCat path for this axis
+            axis_path = f"{path}/{axis_name}"
+            node = self._viz.viewer
+            for part in str(axis_path).split("/"):
+                if part:
+                    node = node[part]
+            node.set_object(geom)
+            
+            # Apply transform (translation + rotation)
+            T = tf.translation_matrix([float(position[0]), float(position[1]), float(position[2])])
+            if orientation_rpy is not None:
+                roll, pitch, yaw = float(orientation_rpy[0]), float(orientation_rpy[1]), float(orientation_rpy[2])
+                R = tf.euler_matrix(roll, pitch, yaw)
+                T = T @ R
+            node.set_transform(T)
+    
+    def update_point(self, path, position=None, color=None, radius=None, opacity=None):
+        """
+        Update an existing point in the visualization.
+        
+        Parameters
+        - path: MeshCat path of the point to update
+        - position: optional numpy array [x, y, z] for new position
+        - color: optional new RGB hex integer
+        - radius: optional new radius
+        - opacity: optional new opacity (0.0-1.0)
+        """
+        # Validate position if provided
+        if position is not None:
+            if not isinstance(position, np.ndarray) or position.shape != (3,):
+                raise TypeError("position must be a numpy array with shape (3,)")
+        
+        # Resolve MeshCat path
+        node = self._viz.viewer
+        for part in str(path).split("/"):
+            if part:
+                node = node[part]
+        
+        # If geometry/material properties changed, recreate the object
+        if color is not None or radius is not None or opacity is not None:
+            # Use current values as defaults if not provided
+            current_radius = radius if radius is not None else 0.02
+            current_color = color if color is not None else 0xFF0000
+            current_opacity = opacity if opacity is not None else 1.0
+            
+            geom = g.Sphere(float(current_radius))
+            material = g.MeshLambertMaterial(
+                color=int(current_color),
+                opacity=float(current_opacity),
+                transparent=(current_opacity < 1.0)
+            )
+            node.set_object(geom, material)
+        
+        # Update position if provided
+        if position is not None:
+            T = tf.translation_matrix([float(position[0]), float(position[1]), float(position[2])])
+            node.set_transform(T)
+
+    def update_triad(self, path, position=None, orientation_rpy=None):
+        """
+        Update an existing triad's position and/or orientation.
+        
+        Parameters
+        - path: MeshCat path of the triad to update
+        - position: optional numpy array [x, y, z] for new position
+        - orientation_rpy: optional numpy array [roll, pitch, yaw] for new orientation
+        """
+        # Validate inputs if provided
+        if position is not None:
+            if not isinstance(position, np.ndarray) or position.shape != (3,):
+                raise TypeError("position must be a numpy array with shape (3,)")
+        
+        if orientation_rpy is not None:
+            if not isinstance(orientation_rpy, np.ndarray) or orientation_rpy.shape != (3,):
+                raise TypeError("orientation_rpy must be a numpy array with shape (3,)")
+        
+        # If no updates requested, return early
+        if position is None and orientation_rpy is None:
+            return
+        
+        # Update each axis of the triad (x, y, z)
+        for axis_name in ['x', 'y', 'z']:
+            axis_path = f"{path}/{axis_name}"
+            node = self._viz.viewer
+            for part in str(axis_path).split("/"):
+                if part:
+                    node = node[part]
+            
+            # Build new transform
+            # Use provided position or keep existing (would need to track state for full implementation)
+            # For simplicity, we require position to be provided
+            if position is None:
+                raise ValueError("position must be provided to update triad (tracking existing state not implemented)")
+            
+            T = tf.translation_matrix([float(position[0]), float(position[1]), float(position[2])])
+            if orientation_rpy is not None:
+                roll, pitch, yaw = float(orientation_rpy[0]), float(orientation_rpy[1]), float(orientation_rpy[2])
+                R = tf.euler_matrix(roll, pitch, yaw)
+                T = T @ R
+            
+            node.set_transform(T)
+    
+    def quaternion_to_euler_numpy(self, quat):
+        """
+        Convert quaternion to Euler angles using numpy only.
+        
+        Args:
+            quat: [qx, qy, qz, qw] as numpy array
+        
+        Returns:
+            [roll, pitch, yaw] as numpy array
+        """
+        qx, qy, qz, qw = quat[0], quat[1], quat[2], quat[3]
+        
+        # Roll (x-axis rotation)
+        sinr_cosp = 2 * (qw * qx + qy * qz)
+        cosr_cosp = 1 - 2 * (qx * qx + qy * qy)
+        roll = np.arctan2(sinr_cosp, cosr_cosp)
+        
+        # Pitch (y-axis rotation)
+        sinp = 2 * (qw * qy - qz * qx)
+        if abs(sinp) >= 1:
+            pitch = np.copysign(np.pi / 2, sinp)  # Use 90 degrees if out of range
+        else:
+            pitch = np.arcsin(sinp)
+        
+        # Yaw (z-axis rotation)
+        siny_cosp = 2 * (qw * qz + qx * qy)
+        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+        yaw = np.arctan2(siny_cosp, cosy_cosp)
+        
+        return np.array([roll, pitch, yaw])
