@@ -134,7 +134,7 @@ if __name__ == "__main__":
     # Surface parameters (must match visualization)
     surface_position = np.array([-0.5, 1.5, 0.2])
     surface_orientation_rpy = np.array([0.9, 0.0, 0.4])
-    desired_offset = 1.0  # Maintain 1 unit offset above surface
+    desired_offset = 1.0
     
     mpc = model_predictive_control(
         surface=quadratic_surface,
@@ -165,6 +165,7 @@ if __name__ == "__main__":
     # Initialize trajectory line for end-effector tracking
     initial_ee_pos = np.array(robot.forward_kinematics(q_0)).flatten()[:3]
     trajectory_points = np.array([initial_ee_pos])
+    scene.add_point([1.0, 0.5, 0.3], path="points/target", color=0xFF0000, radius=0.03)
     scene.add_line(trajectory_points.reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
     
     run_sim(
