@@ -26,6 +26,9 @@ class MeshCatVisualizer:
         
         # Hide background by default
         self._viz.viewer["/Background"].set_property("visible", False)
+        
+        # Storage for lines
+        self._lines = {}
 
     def jupyter_cell(self):
         """Return the Jupyter widget for inline rendering."""
@@ -130,3 +133,82 @@ class MeshCatVisualizer:
         except Exception:
             # Keep surface at world origin if transform cannot be applied
             pass
+
+    def add_line(self, points, path="lines/line", color=0xFF0000, line_width=2.0):
+        """
+        Add a line to the visualization.
+        
+        Parameters
+        - points: Nx3 numpy array or list of 3D points defining the line segments
+        - path: MeshCat path where the line will be inserted (e.g., 'lines/trajectory')
+        - color: RGB hex integer (e.g., 0xFF0000 for red)
+        - line_width: width of the line
+        """
+        points = np.asarray(points, dtype=np.float32)
+        if points.ndim != 2 or points.shape[1] != 3:
+            raise ValueError("points must be an Nx3 array")
+        
+        # Store line data for later updates
+        self._lines[path] = {
+            'points': points.copy(),
+            'color': color,
+            'line_width': line_width
+        }
+        
+        # Create line geometry and material
+        geom = g.Line(
+            g.PointsGeometry(points.T),
+            g.LineBasicMaterial(color=int(color), linewidth=float(line_width))
+        )
+        
+        # Resolve MeshCat path and set object
+        node = self._viz.viewer
+        for part in str(path).split("/"):
+            if part:
+                node = node[part]
+        node.set_object(geom)
+
+    def update_line(self, path, points=None, color=None, line_width=None):
+        """
+        Update an existing line in the visualization.
+        
+        Parameters
+        - path: MeshCat path of the line to update
+        - points: optional Nx3 numpy array or list of new 3D points
+        - color: optional new RGB hex integer
+        - line_width: optional new line width
+        """
+        if path not in self._lines:
+            raise ValueError(f"Line at path '{path}' does not exist. Use add_line() first.")
+        
+        # Update stored data
+        if points is not None:
+            points = np.asarray(points, dtype=np.float32)
+            if points.ndim != 2 or points.shape[1] != 3:
+                raise ValueError("points must be an Nx3 array")
+            self._lines[path]['points'] = points.copy()
+        
+        if color is not None:
+            self._lines[path]['color'] = color
+        
+        if line_width is not None:
+            self._lines[path]['line_width'] = line_width
+        
+        # Get current line data
+        line_data = self._lines[path]
+        
+        # Recreate line geometry and material with updated data
+        geom = g.Line(
+            g.PointsGeometry(line_data['points'].T),
+            g.LineBasicMaterial(
+                color=int(line_data['color']),
+                linewidth=float(line_data['line_width'])
+            )
+        )
+        
+        # Resolve MeshCat path and update object
+        node = self._viz.viewer
+        for part in str(path).split("/"):
+            if part:
+                node = node[part]
+        node.set_object(geom)
