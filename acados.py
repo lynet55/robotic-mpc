@@ -22,11 +22,11 @@ class MPC:
             surface_orientation_rpy: Surface orientation as [roll, pitch, yaw] in radians
             desired_offset: Desired offset distance from surface (default: 1.0)
         """
-        self._surface = surface
+        self._surface_expression = surface.get_quadratic_surface()
         self._state = state
-        self.surface_position = surface_position if surface_position is not None else np.array([-0.5, 1.5, 0.2])
-        self.surface_orientation_rpy = surface_orientation_rpy if surface_orientation_rpy is not None else np.array([0.9, 0.0, 0.4])
-        self.desired_offset = desired_offset
+        self.surface_position = surface.get_position()
+        self.surface_orientation_rpy = surface.get_orientation_rpy()
+        self.desired_offset = surface.get_desired_offset()
 
         self.ocp = AcadosOcp()
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
@@ -113,7 +113,7 @@ class MPC:
         
         # Evaluate surface height at current x,y position in surface frame
         # The surface expression should use px_surf and py_surf
-        surface_height = ca.substitute(surface, 
+        surface_height = ca.substitute(self._surface_expression, 
                                         ca.vertcat(ca.SX.sym("x"), ca.SX.sym("y")),
                                         ca.vertcat(px_surf, py_surf))
 

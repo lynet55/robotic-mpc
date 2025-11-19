@@ -9,7 +9,7 @@ from loader import UrdfLoader as urdf
 from visualizer import MeshCatVisualizer as robot_visualizer
 # from model import SixDofRobot as six_dof_model
 from model_casadi import SixDofRobot as six_dof_model
-
+from surface import Surface
 
 def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
     """
@@ -101,11 +101,6 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
 
 if __name__ == "__main__":
 
-    x = ca.SX.sym("x")
-    y = ca.SX.sym("y")
-    a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
-    quadratic_surface = a*x**2 + b*y**2 + c*x*y + d*x + e*y + f
-
     joint_range = [-2*np.pi, 2*np.pi]
     joint_limits = np.array([joint_range, joint_range, joint_range, joint_range, joint_range, joint_range])
     q_0 = np.array([
@@ -124,46 +119,46 @@ if __name__ == "__main__":
         integration_method="RK2"
     )
 
-    # Surface parameters (must match visualization)
-    surface_position = np.array([-0.5, 1.5, 0.2])
-    surface_orientation_rpy = np.array([0.9, 0.0, 0.4])
-    desired_offset = 1.0
-    
-    mpc = model_predictive_control(
-        surface=quadratic_surface,
-        state=robot.state,
-        control_input=robot.control,
-        dynamics=robot.get_explicit_model()['ode'],
-        forward_kinematics=robot.fk_casadi,
-        differential_kinematics=robot.dk_casadi,
-        surface_position=surface_position,
-        surface_orientation_rpy=surface_orientation_rpy,
-        desired_offset=desired_offset,
-    )
-    
     surface_limits = ((-0.5, 0.5), (-0.3, 0.3))
     surface_origin = np.array([-0.5, 1.5, 0.2])
-    surface_orientation = np.array([0.9, 0.0, 0.4])
+    surface_orientation_rpy = np.array([0.9, 0.0, 0.4])
 
     task_origin = np.array([1.0, 0.5, 0.3])
     task_orientation = np.array([0.0, 0.0, 0.0])
 
+    surface = Surface(
+        position=surface_origin,
+        orientation_rpy=surface_orientation_rpy,
+        limits=surface_limits
+    )
+    
+    mpc = model_predictive_control(
+        surface=surface,
+        state=robot.state,
+        control_input=robot.control,
+        dynamics=robot.get_explicit_model()['ode'],
+        forward_kinematics=robot.fk_casadi,
+        differential_kinematics=robot.dk_casadi
+    )
+    
+
+
     scene.add_surface_from_casadi(
-        quadratic_surface, x, y,
-        x_limits=surface_limits[0],
-        y_limits=surface_limits[1],
+        surface.get_surface_function(),
+        x_limits=surface.get_limits()[0],
+        y_limits=surface.get_limits()[1],
         resolution=80,
         path="surfaces/quadratic_surface",
         color=0x3399FF,
         opacity=0.6,    
         origin=surface_origin,             # set position here
-        orientation_rpy=surface_orientation,    # optional roll, pitch, yaw (rad)
+        orientation_rpy=surface_orientation_rpy,    # optional roll, pitch, yaw (rad)
     )
 
     # Add coordinate frame triad at surface origin
     scene.add_triad(
         position=surface_origin,
-        orientation_rpy=surface_orientation,
+        orientation_rpy=surface_orientation_rpy,
         path="frames/surface_origin",
         scale=0.2,
         line_width=1.0
