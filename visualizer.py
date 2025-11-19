@@ -212,3 +212,37 @@ class MeshCatVisualizer:
             if part:
                 node = node[part]
         node.set_object(geom)
+
+    def add_point(self, position, path="points/point", color=0xFF0000, radius=0.02, opacity=1.0):
+        """
+        Add a point (sphere) to the visualization.
+        
+        Parameters
+        - position: 3-element array or list [x, y, z] specifying the point location
+        - path: MeshCat path where the point will be inserted (e.g., 'points/target')
+        - color: RGB hex integer (e.g., 0xFF0000 for red)
+        - radius: radius of the sphere representing the point
+        - opacity: opacity of the point (0.0-1.0)
+        """
+        position = np.asarray(position, dtype=np.float32)
+        if position.shape != (3,):
+            raise ValueError("position must be a 3-element array [x, y, z]")
+        
+        # Create sphere geometry and material
+        geom = g.Sphere(float(radius))
+        material = g.MeshLambertMaterial(
+            color=int(color),
+            opacity=float(opacity),
+            transparent=(opacity < 1.0)
+        )
+        
+        # Resolve MeshCat path and set object
+        node = self._viz.viewer
+        for part in str(path).split("/"):
+            if part:
+                node = node[part]
+        node.set_object(geom, material)
+        
+        # Set position
+        T = tf.translation_matrix([float(position[0]), float(position[1]), float(position[2])])
+        node.set_transform(T)
