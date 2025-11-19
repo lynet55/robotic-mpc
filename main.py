@@ -67,15 +67,7 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
 
         # Update the full state using the integrator
         next_state = model.update(current_state, optimal_control)
-
-        q1 = next_state[0]
-        q2 = next_state[1]
-        q3 = next_state[2]
-        q4 = next_state[3]
-        q5 = next_state[4]
-        q6 = next_state[5]
-
-        # print(q)
+        q1, q2, q3, q4, q5, q6 = next_state[:model.n_dof]
 
         scene.set_joint_angles({
             "shoulder_pan_joint": q1,
@@ -94,10 +86,11 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
         end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
         end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
 
-        # Update trajectory line every 10 steps for performance
         if (t + 1) % 10 == 0:
             trajectory_points.append(end_effector_pose[t + 1][:3])
             scene.update_line("lines/trajectory", points=np.array(trajectory_points))
+            scene.update_triad("frames/end_effector_frame", position=end_effector_pose[t][:3], orientation_rpy=scene.quaternion_to_euler_numpy(end_effector_pose[t][3:]))
+
 
         time.sleep(delay_time)
     
@@ -147,15 +140,18 @@ if __name__ == "__main__":
         surface_orientation_rpy=surface_orientation_rpy,
         desired_offset=desired_offset,
     )
-    surface_x_limits = (-0.5, 0.5)
-    surface_y_limits = (-0.3, 0.3)
+    
+    surface_limits = ((-0.5, 0.5), (-0.3, 0.3))
     surface_origin = np.array([-0.5, 1.5, 0.2])
     surface_orientation = np.array([0.9, 0.0, 0.4])
 
+    task_origin = np.array([1.0, 0.5, 0.3])
+    task_orientation = np.array([0.0, 0.0, 0.0])
+
     scene.add_surface_from_casadi(
         quadratic_surface, x, y,
-        x_limits=surface_x_limits,
-        y_limits=surface_y_limits,
+        x_limits=surface_limits[0],
+        y_limits=surface_limits[1],
         resolution=80,
         path="surfaces/quadratic_surface",
         color=0x3399FF,
@@ -164,10 +160,35 @@ if __name__ == "__main__":
         orientation_rpy=surface_orientation,    # optional roll, pitch, yaw (rad)
     )
 
+    # Add coordinate frame triad at surface origin
+    scene.add_triad(
+        position=surface_origin,
+        orientation_rpy=surface_orientation,
+        path="frames/surface_origin",
+        scale=0.2,
+        line_width=1.0
+    )
+    scene.add_triad(
+        position=np.array([1.0, 0.5, 0.3]),
+        orientation_rpy=np.array([0.0, 0.0, 0.0]),
+        path="frames/end_effector_frame",
+        scale=0.2,
+        line_width=1.0
+    )
+    scene.add_triad(
+        position=task_origin,
+        orientation_rpy=np.array([0.0, 0.0, 0.0]),
+        path="frames/task_frame",
+        scale=0.2,
+        line_width=1.0
+    )
+
+
+
     # Initialize trajectory line for end-effector tracking
     initial_ee_pos = np.array(robot.forward_kinematics(q_0)).flatten()[:3]
     trajectory_points = np.array([initial_ee_pos])
-    scene.add_point(np.array([1.0, 0.5, 0.3]), path="points/target", color=0xFF0000, radius=0.03)
+    scene.add_point(task_origin, path="points/inital_end_effector_position", color=0xFF0000, radius=0.03)
     scene.add_line(trajectory_points.reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
     
     run_sim(
