@@ -47,9 +47,7 @@ class MeshCatVisualizer:
 
     def add_surface_from_casadi(
         self,
-        expr,
-        x_symbol,
-        y_symbol,
+        casadi_surface_function,
         x_limits=(-1.0, 1.0),
         y_limits=(-1.0, 1.0),
         resolution=50,
@@ -88,7 +86,7 @@ class MeshCatVisualizer:
                 raise TypeError("orientation_rpy must be a numpy array with shape (3,)")
         
         # Build callable CasADi function f(x, y) -> z
-        f = ca.Function("surface", [x_symbol, y_symbol], [expr])
+        f = casadi_surface_function
         
         # Create grid
         xs = np.linspace(float(x_limits[0]), float(x_limits[1]), int(resolution))
