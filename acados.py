@@ -4,7 +4,7 @@ from acados_template import AcadosOcp, AcadosOcpSolver
 
 class MPC:
     
-    def __init__(self, surface, state, control_input, dynamics, 
+    def __init__(self, surface, state, initial_state, control_input, dynamics, 
                  forward_kinematics, differential_kinematics,
                  surface_position=None, surface_orientation_rpy=None, 
                  desired_offset=1.0):
@@ -144,7 +144,7 @@ class MPC:
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
         # Initial state (12 dimensions for 6-DOF robot: [q(6), q_dot(6)])
-        self.x0 = np.zeros(12)  # All joints at zero position and velocity
-        self.ocp.constraints.x0 = self.x0
+        self.x0 = initial_state  # All joints at zero position and velocity
+        self.ocp.constraints.x0 = initial_state
         
         self.solver = AcadosOcpSolver(self.ocp, json_file='acados_ocp.json')
