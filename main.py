@@ -136,7 +136,7 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
             trajectory_points.append(end_effector_pose[t + 1][:3].tolist())
             scene.update_line("lines/trajectory", points=np.array(trajectory_points))
             scene.update_triad("frames/end_effector_frame", position=end_effector_pose[t][:3], orientation_rpy=scene.quaternion_to_euler_numpy(end_effector_pose[t][3:]))
-            scene.update_triad("frames/task_frame", position=task_origin_world, orientation_rpy=initial_task_orientation)
+            scene.update_triad("frames/task_frame", position=task_origin_world, orientation_rpy=surface.get_rpy(x_new_task_origin_local, y_new_task_origin_local))
 
 
         time.sleep(delay_time)
