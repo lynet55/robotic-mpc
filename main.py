@@ -92,6 +92,8 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
 
         current_q = q[t]
         current_q_dot = q_dot[t]
+        current_ee_pose = end_effector_pose[t]
+        current_ee_velocity = end_effector_velocity[t]
 
         # Set current constraint: [q, q_dot]
         current_state = np.concatenate((current_q, current_q_dot))
@@ -100,8 +102,6 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
 
         status = solver.solve()
         optimal_control = solver.get(0, "u")
-
-        # print("Optimal control: ", optimal_control)
 
         # Update the full state using the integrator
         next_state = model.update(current_state, optimal_control)
@@ -128,9 +128,6 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
         x_new_task_origin_local = task_origin_local[0] - 0.0001
         y_new_task_origin_local = task_origin_local[1] + 0.0001
         task_origin_local, task_origin_world = surface.get_point_on_surface(x_new_task_origin_local, y_new_task_origin_local)
-        task_origin = (task_origin_local, task_origin_world)
-        print(f"Task origin (local): {task_origin_local}, (world): {task_origin_world}")
-
 
         if (t + 1) % 10 == 0:
             trajectory_points.append(end_effector_pose[t + 1][:3].tolist())
@@ -172,6 +169,7 @@ if __name__ == "__main__":
     mpc = model_predictive_control(
         surface=surface,
         state=robot.state,
+        initial_state=robot.initial_state,
         control_input=robot.control,
         dynamics=robot.get_explicit_model()['ode'],
         forward_kinematics=robot.fk_casadi,

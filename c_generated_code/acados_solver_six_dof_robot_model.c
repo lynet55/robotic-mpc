@@ -487,6 +487,12 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     double* lbx0 = lubx0;
     double* ubx0 = lubx0 + NBX0;
     // change only the non-zero elements:
+    lbx0[6] = 2;
+    ubx0[6] = 2;
+    lbx0[7] = 2;
+    ubx0[7] = 2;
+    lbx0[11] = 5;
+    ubx0[11] = 5;
 
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, nlp_out, 0, "idxbx", idxbx0);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, nlp_out, 0, "lbx", lbx0);
@@ -801,6 +807,9 @@ void six_dof_robot_model_acados_set_nlp_out(six_dof_robot_model_solver_capsule* 
     double* x0 = xu0;
 
     // initialize with x0
+    x0[6] = 2;
+    x0[7] = 2;
+    x0[11] = 5;
 
 
     double* u0 = xu0 + NX;
