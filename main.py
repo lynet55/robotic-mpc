@@ -123,14 +123,15 @@ if __name__ == "__main__":
     surface_origin = np.array([-0.5, 1.5, 0.2])
     surface_orientation_rpy = np.array([0.9, 0.0, 0.4])
 
-    task_origin = np.array([1.0, 0.5, 0.3])
-    task_orientation = np.array([0.0, 0.0, 0.0])
 
     surface = Surface(
         position=surface_origin,
         orientation_rpy=surface_orientation_rpy,
         limits=surface_limits
     )
+
+    task_origin = surface.get_random_point_on_surface()
+    task_orientation = np.array([0.0, 0.0, 0.0])
     
     mpc = model_predictive_control(
         surface=surface,
@@ -141,8 +142,6 @@ if __name__ == "__main__":
         differential_kinematics=robot.dk_casadi
     )
     
-
-
     scene.add_surface_from_casadi(
         surface.get_surface_function(),
         x_limits=surface.get_limits()[0],
@@ -183,7 +182,7 @@ if __name__ == "__main__":
     # Initialize trajectory line for end-effector tracking
     initial_ee_pos = np.array(robot.forward_kinematics(q_0)).flatten()[:3]
     trajectory_points = np.array([initial_ee_pos])
-    scene.add_point(task_origin, path="points/inital_end_effector_position", color=0xFF0000, radius=0.03)
+    scene.add_point(initial_ee_pos, path="points/inital_end_effector_position", color=0xFF0000, radius=0.01)
     scene.add_line(trajectory_points.reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
     
     run_sim(
