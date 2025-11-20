@@ -4,7 +4,7 @@ import pinocchio as pin
 import pinocchio.casadi as cpin
 
 class SixDofRobot:
-    def __init__(self, initial_state, urdf_loader, integration_method="RK2", dt=0.01, th=None):
+    def __init__(self, urdf_loader, integration_method="RK2", dt=0.01, th=None):
         # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
         self._data = urdf_loader.data
@@ -13,12 +13,12 @@ class SixDofRobot:
         self._cmodel = cpin.Model(self._model)
         self._cdata = self._cmodel.createData()
         
-        self._z0 = initial_state
         self._integration_method_name = integration_method
         self.dt = dt  # Fixed timestep for integration
         
         # Get the number of degrees of freedom
         self.n_dof = self._model.nq
+        self._z0 = np.zeros(2 * self.n_dof)
         
         # Get end-effector frame ID from both models
         # Use 'tool0' as the end-effector frame (standard UR5 frame)
@@ -246,6 +246,10 @@ class SixDofRobot:
             'control': self.control,
             'residual': residual
         }
+    
+    def set_initial_state(self, initial_state):
+        self._z0 = initial_state
+    
     @property
     def state_dimensions(self):
         return 2 * self.n_dof

@@ -13,19 +13,8 @@ class Surface:
         a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
         self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
 
-    def get_surface_height(self, x_rel, y_rel):
-        """
-        Get surface height in local surface frame coordinates.
-        
-        Args:
-            x_rel: x coordinate in surface frame
-            y_rel: y coordinate in surface frame
-        
-        Returns:
-            z height in surface frame
-        """
-        surface_func = self.get_surface_function()
-        return surface_func(x_rel, y_rel)
+    def get_surface_height(self, x, y):
+        return self.quadratic_surface(x, y)
 
     def get_position(self):
         return self.position
