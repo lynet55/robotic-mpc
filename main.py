@@ -101,38 +101,36 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
 
 if __name__ == "__main__":
 
-    joint_range = [-2*np.pi, 2*np.pi]
-    joint_limits = np.array([joint_range, joint_range, joint_range, joint_range, joint_range, joint_range])
-    q_0 = np.array([
-        np.random.uniform(joint_limits[i, 0], joint_limits[i, 1]) 
-        for i in range(6)
-    ], dtype=np.float64)  
-    
-    qdot_0 = np.array([2,2,0,0,0,5], dtype=np.float64) #Initial angular speeds
-
-    robot_loader = urdf("ur5")
-    scene = robot_visualizer(robot_loader)
-    
-    robot = six_dof_model(
-        urdf_loader=robot_loader,
-        initial_state = np.hstack((q_0, qdot_0)),
-        integration_method="RK2"
-    )
-
     surface_limits = ((-0.5, 0.5), (-0.3, 0.3))
     surface_origin = np.array([-0.5, 1.5, 0.2])
     surface_orientation_rpy = np.array([0.9, 0.0, 0.4])
 
 
+    robot_loader = urdf("ur5")
+    scene = robot_visualizer(robot_loader)
     surface = Surface(
         position=surface_origin,
         orientation_rpy=surface_orientation_rpy,
         limits=surface_limits
     )
+    robot = six_dof_model(
+        urdf_loader=robot_loader,
+        integration_method="RK2"
+    )
 
-    task_origin = surface.get_random_point_on_surface()
-    task_orientation = np.array([0.0, 0.0, 0.0])
-    
+    qdot_0 = np.array([2,2,0,0,0,5], dtype=np.float64)
+    joint_range = [-2*np.pi, 2*np.pi]
+    joint_limits = np.array([joint_range, joint_range, joint_range, joint_range, joint_range, joint_range])
+    q_0 = np.array([
+        np.random.uniform(joint_limits[i, 0], joint_limits[i, 1]) 
+        for i in range(6)
+    ], dtype=np.float64)
+
+    initial_task_origin = surface.get_random_point_on_surface()
+    initial_task_orientation = np.array([0.0, 0.0, 0.0])
+
+    robot.set_initial_state(np.hstack((q_0, qdot_0)))
+
     mpc = model_predictive_control(
         surface=surface,
         state=robot.state,
@@ -170,19 +168,14 @@ if __name__ == "__main__":
         line_width=1.0
     )
     scene.add_triad(
-        position=task_origin,
-        orientation_rpy=np.array([0.0, 0.0, 0.0]),
+        position=initial_task_origin,
+        orientation_rpy=initial_task_orientation,
         path="frames/task_frame",
         scale=0.2,
         line_width=1.0
     )
 
-
-
-    # Initialize trajectory line for end-effector tracking
-    initial_ee_pos = np.array(robot.forward_kinematics(q_0)).flatten()[:3]
-    trajectory_points = np.array([initial_ee_pos])
-    scene.add_point(initial_ee_pos, path="points/inital_end_effector_position", color=0xFF0000, radius=0.01)
+    trajectory_points = np.array([robot.forward_kinematics(q_0)[:3]])
     scene.add_line(trajectory_points.reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
     
     run_sim(
