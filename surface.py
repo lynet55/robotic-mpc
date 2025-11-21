@@ -151,3 +151,75 @@ class Surface:
         rpy_func = self.get_rpy_function()
         rpy_result = rpy_func(x_surface, y_surface)
         return np.array(rpy_result).flatten()
+    
+    def generate_simple_trajectory(self, initial_point_task_surface, time_increment, x_margin_surface, y_margin_surface, num_points_x=400, num_points_y=400, x_step=1, y_step=1):
+        """
+        Generate a serpentine trajectory over the surface grid.
+        
+        The path:
+        - Uses linspace-like grids for x and y within the surface limits.
+        - Steps "down" (toward lower y) by one grid index.
+        - Reverses x direction and repeats.
+        
+        Args:
+            initial_point_task_surface: iterable of length 2 (x, y) in the surface frame.
+            time_increment: unused placeholder for future time-parameterization.
+            x_margin_surface: integer margin (grid points) from x boundaries.
+            y_margin_surface: integer margin (grid points) from lower y boundary.
+            num_points_x: number of grid points along x.
+            num_points_y: number of grid points along y.
+            x_step: grid index increment when moving along x each step.
+            y_step: grid index decrement when stepping down each row along y.
+        
+        Returns:
+            np.ndarray of shape (N, 3) with [x, y, z] points in world coordinates.
+        """
+        x_min, x_max = self.limits[0]
+        y_min, y_max = self.limits[1]
+        
+        x_coords = np.linspace(x_min, x_max, num=num_points_x)
+        y_coords = np.linspace(y_min, y_max, num=num_points_y)
+   
+        margin_x = x_margin_surface if num_points_x > 2 * x_margin_surface + 1 else max(1, (num_points_x - 1) // 4)
+        margin_y = y_margin_surface if num_points_y > 2 * y_margin_surface + 1 else max(1, (num_points_y - 1) // 4)
+        
+        x0 = float(initial_point_task_surface[0])
+        y0 = float(initial_point_task_surface[1])
+        
+        ix = int(np.argmin(np.abs(x_coords - x0)))
+        iy = int(np.argmin(np.abs(y_coords - y0)))
+        
+        # Clamp start indices to respect the margins
+        ix = int(np.clip(ix, x_margin_surface, num_points_x - x_margin_surface - 1))
+        iy = int(np.clip(iy, y_margin_surface, num_points_y - y_margin_surface - 1))
+        
+        # Choose initial x direction based on which half we start in
+        x_dir = -1 if ix > (num_points_x // 2) else 1
+        
+        path_points = []
+        path_points.append([x_coords[ix], y_coords[iy]])
+        
+        # Serpentine scan: move along x within margins, step down in y, reverse x direction
+        while iy > margin_y:
+            # Traverse along x within the safe margins
+            while True:
+                next_ix = ix + (x_dir * max(1, int(x_step)))
+                if next_ix < margin_x or next_ix > (num_points_x - margin_x - 1):
+                    break
+                ix = next_ix
+                path_points.append([x_coords[ix], y_coords[iy]])
+            
+            # Step down in y (toward lower boundary)
+            next_iy = iy - max(1, int(y_step))
+            if next_iy < margin_y:
+                break
+            iy = next_iy
+            path_points.append([x_coords[ix], y_coords[iy]])
+            
+            # Reverse x direction for the next row
+            x_dir *= -1
+        
+        # Map local (x, y) waypoints to world-frame [x, y, z] on the surface
+        path_points_world = [self.get_point_on_surface(x, y)[1] for x, y in path_points]
+        
+        return np.array(path_points_world)
