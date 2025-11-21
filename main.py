@@ -41,22 +41,23 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
     q = np.zeros((total_time, model.n_dof)) # joint positions
     q_dot = np.zeros((total_time, model.n_dof)) # joint velocities
 
-    end_effector_pose = np.zeros((total_time, 7)) # end-effector pose [x, y, z, qx, qy, qz, qw]
-    end_effector_velocity = np.zeros((total_time, 6)) # end-effector velocity [vx, vy, vz, wx, wy, wz]
-
+    ee_pose_world = np.zeros((total_time, 7)) # end-effector pose [x, y, z, qx, qy, qz, qw]
+    ee_velocity_world = np.zeros((total_time, 6)) # end-effector velocity [q_dot_x, qdot_y, qdot_z, wx, wy, wz]
+    
     # Set initial conditions from robot's initial state
     q[0] = model.initial_state[:model.n_dof]
     q_dot[0] = model.initial_state[model.n_dof:]
-    end_effector_pose[0] = np.array(model.forward_kinematics(q[0])).flatten()
-    end_effector_velocity[0] = np.array(model.differential_kinematics(q[0], q_dot[0])).flatten()
+    ee_pose_world[0] = np.array(model.forward_kinematics(q[0])).flatten()
+    ee_velocity_world[0] = np.array(model.differential_kinematics(q[0], q_dot[0])).flatten()
     
-    # Initialize trajectory tracking - KEEP AS LIST
-    trajectory_points = [end_effector_pose[0][:3].tolist()]
+    trajectory_points = [ee_pose_world[0][:3].tolist()]
 
-    task_origin_local, task_origin_world = surface.get_random_point_on_surface() #initial task origin - returns (local, world)
+    task_origin_surface, task_origin_world = surface.get_random_point_on_surface()
     initial_task_orientation = np.array([0.0, 0.0, 0.0])
 
-    initial_ee_pos = end_effector_pose[0][:3]
+    initial_ee_pose_world = ee_pose_world[0][:3]
+    scene.add_line(np.array([initial_ee_pose_world]).reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
+    
     
     # Add coordinate frame triad at surface origin
     scene.add_triad(
@@ -74,36 +75,28 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
         line_width=1.0
     )
     scene.add_triad(
-        position=task_origin_world, #Initial task origin in world frame
+        position=task_origin_world,
         orientation_rpy=initial_task_orientation,
         path="frames/task_frame",
         scale=0.2,
         line_width=1.0
     )
-
-    # Initialize trajectory line with initial position
-    scene.add_line(np.array([initial_ee_pos]).reshape(-1, 3), path="lines/trajectory", color=0xFF0000, line_width=2.0)
-    
-    print(f"Starting simulation for {total_time} steps...")
-    print(f"Initial end-effector position: {end_effector_pose[0][:3]}")
-    
+        
     #Control Loop
     for t in range(total_time - 1):
 
         current_q = q[t]
         current_q_dot = q_dot[t]
-        current_ee_pose = end_effector_pose[t]
-        current_ee_velocity = end_effector_velocity[t]
+        current_ee_pose_world = ee_pose_world[t]
+        current_ee_velocity_world = ee_velocity_world[t]
 
-        # Set current constraint: [q, q_dot]
+
         current_state = np.concatenate((current_q, current_q_dot))
         solver.set(0, 'lbx', current_state)
         solver.set(0, 'ubx', current_state)
-
         status = solver.solve()
         optimal_control = solver.get(0, "u")
 
-        # Update the full state using the integrator
         next_state = model.update(current_state, optimal_control)
         q1, q2, q3, q4, q5, q6 = next_state[:model.n_dof]
 
@@ -121,20 +114,21 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
         q_dot[t + 1] = next_state[model.n_dof:]
         
         # Compute end-effector kinematics (flatten to 1D arrays)
-        end_effector_pose[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
-        end_effector_velocity[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
+        ee_pose_world[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
+        ee_velocity_world[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
 
         # Move task frame along x in surface coordinates
-        x_new_task_origin_local = task_origin_local[0] - 0.0001
-        y_new_task_origin_local = task_origin_local[1] + 0.0001
-        task_origin_local, task_origin_world = surface.get_point_on_surface(x_new_task_origin_local, y_new_task_origin_local)
+        x_new_task_origin_surface = task_origin_surface[0] - 0.001
+        y_new_task_origin_surface = task_origin_surface[1]
+        task_origin_surface, task_origin_world = surface.get_point_on_surface(x_new_task_origin_surface, y_new_task_origin_surface)
+
+        trajectory_points.append(ee_pose_world[t + 1][:3].tolist())
+        scene.update_line("lines/trajectory", points=np.array(trajectory_points))
+        scene.update_triad("frames/end_effector_frame", position=ee_pose_world[t][:3], orientation_rpy=scene.quaternion_to_euler_numpy(ee_pose_world[t][3:]))
+        scene.update_triad("frames/task_frame", position=task_origin_world, orientation_rpy=surface.get_rpy(x_new_task_origin_surface, y_new_task_origin_surface))
 
         if (t + 1) % 10 == 0:
-            trajectory_points.append(end_effector_pose[t + 1][:3].tolist())
-            scene.update_line("lines/trajectory", points=np.array(trajectory_points))
-            scene.update_triad("frames/end_effector_frame", position=end_effector_pose[t][:3], orientation_rpy=scene.quaternion_to_euler_numpy(end_effector_pose[t][3:]))
-            scene.update_triad("frames/task_frame", position=task_origin_world, orientation_rpy=surface.get_rpy(x_new_task_origin_local, y_new_task_origin_local))
-
+            print(f"time:  {t}")
 
         time.sleep(delay_time)
     
