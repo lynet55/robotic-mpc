@@ -1,7 +1,7 @@
 {
-    "acados_include_path": "/home/bb/Desktop/projects/robotic-mpc/acados/include",
-    "acados_lib_path": "/home/bb/Desktop/projects/robotic-mpc/acados/lib",
-    "code_export_directory": "/home/bb/Desktop/projects/robotic-mpc/c_generated_code",
+    "acados_include_path": "/Users/bb/Desktop/robotic-mpc/acados/include",
+    "acados_lib_path": "/Users/bb/Desktop/robotic-mpc/acados/lib",
+    "code_export_directory": "/Users/bb/Desktop/robotic-mpc/c_generated_code",
     "constraints": {
         "C": [],
         "C_e": [],
@@ -210,8 +210,8 @@
         "zu_e": []
     },
     "cython_include_dirs": [
-        "/home/bb/anaconda3/lib/python3.13/site-packages/numpy/_core/include",
-        "/home/bb/anaconda3/include/python3.13"
+        "/opt/homebrew/Caskroom/miniforge/base/envs/robotics/lib/python3.11/site-packages/numpy/_core/include",
+        "/opt/homebrew/Caskroom/miniforge/base/envs/robotics/include/python3.11"
     ],
     "dims": {
         "N": 20,
@@ -360,7 +360,7 @@
     "parameter_values": [],
     "problem_class": "OCP",
     "ros_opts": null,
-    "shared_lib_ext": ".so",
+    "shared_lib_ext": ".dylib",
     "simulink_opts": null,
     "solver_options": {
         "N_horizon": 20,
