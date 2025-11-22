@@ -13,3 +13,10 @@
         px_surf = ee_pos_surf[0]  # x in surface frame
         py_surf = ee_pos_surf[1]  # y in surface frame
         pz_surf = ee_pos_surf[2]  # z in surface frame (perpendicular to surface)
+
+
+        # self.ocp.cost.cost_model_expr = running_cost
+        # self.ocp.cost.cost_model_expr_e = terminal_cost
+        # running_cost = 
+        # terminal_cost = w_position_xy * (x_ref - px_surf)**2 + w_position_z * (z_ref - pz_surf)**2
+        # self.ocp.constraints.x0 = initial_state

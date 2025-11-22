@@ -223,3 +223,48 @@ class Surface:
         path_points_world = [self.get_point_on_surface(x, y)[1] for x, y in path_points]
         
         return np.array(path_points_world)
+
+    def get_normal_vector(self, x_surface, y_surface):
+        # Compute partial derivatives symbolically
+        dz_dx = ca.jacobian(self.quadratic_surface, self.x)
+        dz_dy = ca.jacobian(self.quadratic_surface, self.y)
+        
+        # Normal vector components
+        nx = -dz_dx
+        ny = -dz_dy
+        nz = 1.0
+        
+        # Normalize
+        norm = ca.sqrt(nx**2 + ny**2 + nz**2)
+        nx_norm = nx / norm
+        ny_norm = ny / norm
+        nz_norm = nz / norm
+        
+        # Create a function to evaluate at specific points
+        normal_func = ca.Function('normal', [self.x, self.y], 
+                                [nx_norm, ny_norm, nz_norm])
+        
+        # Evaluate at the given point
+        nx_val, ny_val, nz_val = normal_func(x_surface, y_surface)
+        
+        # Convert to numpy array with numerical values
+        return np.array([float(nx_val), float(ny_val), float(nz_val)])
+    
+    def get_normal_vector_casadi(self, x_surface, y_surface):
+        # Assume self.quadratic_surface is expressed in terms of x_sym, y_sym
+        # Compute partial derivatives symbolically
+        dz_dx = ca.jacobian(self.quadratic_surface, self.x)
+        dz_dy = ca.jacobian(self.quadratic_surface, self.y)
+        
+        # Normal vector components
+        nx = -dz_dx
+        ny = -dz_dy
+        nz = 1.0
+        
+        # Normalize
+        norm = ca.sqrt(nx**2 + ny**2 + nz**2)
+        nx_norm = nx / norm
+        ny_norm = ny / norm
+        nz_norm = nz / norm
+        
+        return ca.vertcat(nx_norm, ny_norm, nx_norm)

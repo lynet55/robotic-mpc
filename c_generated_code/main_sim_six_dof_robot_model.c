@@ -101,6 +101,17 @@ int main()
     u0[3] = 0.0;
     u0[4] = 0.0;
     u0[5] = 0.0;
+    // set parameters
+    double p[NP];
+    p[0] = 0;
+    p[1] = 0;
+    p[2] = 0;
+    p[3] = 0;
+    p[4] = 0;
+    p[5] = 0;
+
+    six_dof_robot_model_acados_sim_update_params(capsule, p, NP);
+  
 
   
 
