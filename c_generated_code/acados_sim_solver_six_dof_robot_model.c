@@ -73,7 +73,7 @@ int six_dof_robot_model_acados_sim_create(six_dof_robot_model_sim_solver_capsule
     const int np = SIX_DOF_ROBOT_MODEL_NP;
     bool tmp_bool;
 
-    double Tsim = 0.1;
+    double Tsim = 0.13333333333333333;
 
     external_function_opts ext_fun_opts;
     external_function_opts_set_to_default(&ext_fun_opts);
@@ -168,6 +168,13 @@ int six_dof_robot_model_acados_sim_create(six_dof_robot_model_sim_solver_capsule
                                                six_dof_robot_model_sim_dims, six_dof_robot_model_sim_opts, six_dof_robot_model_sim_in);
     capsule->acados_sim_solver = six_dof_robot_model_sim_solver;
 
+
+    /* initialize parameter values */
+    double* p = calloc(np, sizeof(double));
+    
+
+    six_dof_robot_model_acados_sim_update_params(capsule, p, np);
+    free(p);
 
 
     /* initialize input */

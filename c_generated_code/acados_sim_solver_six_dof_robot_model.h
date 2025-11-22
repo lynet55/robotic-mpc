@@ -37,7 +37,7 @@
 #define SIX_DOF_ROBOT_MODEL_NX     12
 #define SIX_DOF_ROBOT_MODEL_NZ     0
 #define SIX_DOF_ROBOT_MODEL_NU     6
-#define SIX_DOF_ROBOT_MODEL_NP     0
+#define SIX_DOF_ROBOT_MODEL_NP     6
 
 #ifdef __cplusplus
 extern "C" {

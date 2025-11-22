@@ -33,7 +33,6 @@ extern "C" {
 #define casadi_s0 CASADI_PREFIX(s0)
 #define casadi_s1 CASADI_PREFIX(s1)
 #define casadi_s2 CASADI_PREFIX(s2)
-#define casadi_s3 CASADI_PREFIX(s3)
 
 /* Symbol visibility in DLLs */
 #ifndef CASADI_SYMBOL_EXPORT
@@ -52,10 +51,9 @@ extern "C" {
 
 static const casadi_int casadi_s0[3] = {12, 1, 1};
 static const casadi_int casadi_s1[3] = {6, 1, 1};
-static const casadi_int casadi_s2[3] = {0, 1, 1};
-static const casadi_int casadi_s3[3] = {18, 1, 1};
+static const casadi_int casadi_s2[3] = {18, 1, 1};
 
-/* six_dof_robot_model_expl_vde_adj:(i0[12],i1[12],i2[6],i3[0])->(o0[18]) */
+/* six_dof_robot_model_expl_vde_adj:(i0[12],i1[12],i2[6],i3[6])->(o0[18]) */
 static int casadi_f0(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem) {
   casadi_real a0, a1, a2, a3, a4, a5, a6;
   a0=0.;
@@ -158,14 +156,14 @@ CASADI_SYMBOL_EXPORT const casadi_int* six_dof_robot_model_expl_vde_adj_sparsity
     case 0: return casadi_s0;
     case 1: return casadi_s0;
     case 2: return casadi_s1;
-    case 3: return casadi_s2;
+    case 3: return casadi_s1;
     default: return 0;
   }
 }
 
 CASADI_SYMBOL_EXPORT const casadi_int* six_dof_robot_model_expl_vde_adj_sparsity_out(casadi_int i) {
   switch (i) {
-    case 0: return casadi_s3;
+    case 0: return casadi_s2;
     default: return 0;
   }
 }

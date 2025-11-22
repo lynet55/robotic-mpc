@@ -42,6 +42,7 @@
 #include "six_dof_robot_model_model/six_dof_robot_model_model.h"
 
 
+#include "six_dof_robot_model_cost/six_dof_robot_model_cost.h"
 
 
 
@@ -151,15 +152,15 @@ void six_dof_robot_model_acados_create_set_plan(ocp_nlp_plan_t* nlp_solver_plan,
     *  plan
     ************************************************/
 
-    nlp_solver_plan->nlp_solver = SQP;
+    nlp_solver_plan->nlp_solver = SQP_RTI;
 
     nlp_solver_plan->ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
     nlp_solver_plan->relaxed_ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
-    nlp_solver_plan->nlp_cost[0] = LINEAR_LS;
+    nlp_solver_plan->nlp_cost[0] = NONLINEAR_LS;
     for (int i = 1; i < N; i++)
-        nlp_solver_plan->nlp_cost[i] = LINEAR_LS;
+        nlp_solver_plan->nlp_cost[i] = NONLINEAR_LS;
 
-    nlp_solver_plan->nlp_cost[N] = LINEAR_LS;
+    nlp_solver_plan->nlp_cost[N] = NONLINEAR_LS;
 
     for (int i = 0; i < N; i++)
     {
@@ -341,6 +342,9 @@ void six_dof_robot_model_acados_create_setup_functions(six_dof_robot_model_solve
     ext_fun_opts.external_workspace = true;
     if (N > 0)
     {
+        // nonlinear least squares function
+        MAP_CASADI_FNC(cost_y_0_fun, six_dof_robot_model_cost_y_0_fun);
+        MAP_CASADI_FNC(cost_y_0_fun_jac_ut_xt, six_dof_robot_model_cost_y_0_fun_jac_ut_xt);
 
 
 
@@ -362,7 +366,22 @@ void six_dof_robot_model_acados_create_setup_functions(six_dof_robot_model_solve
         }
 
     
+        // nonlinear least squares cost
+        capsule->cost_y_fun = (external_function_external_param_casadi *) malloc(sizeof(external_function_external_param_casadi)*(N-1));
+        for (int i = 0; i < N-1; i++)
+        {
+            MAP_CASADI_FNC(cost_y_fun[i], six_dof_robot_model_cost_y_fun);
+        }
+
+        capsule->cost_y_fun_jac_ut_xt = (external_function_external_param_casadi *) malloc(sizeof(external_function_external_param_casadi)*(N-1));
+        for (int i = 0; i < N-1; i++)
+        {
+            MAP_CASADI_FNC(cost_y_fun_jac_ut_xt[i], six_dof_robot_model_cost_y_fun_jac_ut_xt);
+        }
     } // N > 0
+    // nonlinear least square function
+    MAP_CASADI_FNC(cost_y_e_fun, six_dof_robot_model_cost_y_e_fun);
+    MAP_CASADI_FNC(cost_y_e_fun_jac_ut_xt, six_dof_robot_model_cost_y_e_fun_jac_ut_xt);
 
 #undef MAP_CASADI_FNC
 }
@@ -374,7 +393,14 @@ void six_dof_robot_model_acados_create_setup_functions(six_dof_robot_model_solve
 void six_dof_robot_model_acados_create_set_default_parameters(six_dof_robot_model_solver_capsule* capsule)
 {
 
-    // no parameters defined
+    const int N = capsule->nlp_solver_plan->N;
+    // initialize parameters to nominal value
+    double* p = calloc(NP, sizeof(double));
+
+    for (int i = 0; i <= N; i++) {
+        six_dof_robot_model_acados_update_params(capsule, i, p, NP);
+    }
+    free(p);
 
 
     // no global parameters defined
@@ -412,34 +438,29 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     {
         // set time_steps
     
-        double time_step = 0.1;
+        double time_step = 0.13333333333333333;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
         }
         // set cost scaling
         double* cost_scaling = malloc((N+1)*sizeof(double));
-        cost_scaling[0] = 0.1;
-        cost_scaling[1] = 0.1;
-        cost_scaling[2] = 0.1;
-        cost_scaling[3] = 0.1;
-        cost_scaling[4] = 0.1;
-        cost_scaling[5] = 0.1;
-        cost_scaling[6] = 0.1;
-        cost_scaling[7] = 0.1;
-        cost_scaling[8] = 0.1;
-        cost_scaling[9] = 0.1;
-        cost_scaling[10] = 0.1;
-        cost_scaling[11] = 0.1;
-        cost_scaling[12] = 0.1;
-        cost_scaling[13] = 0.1;
-        cost_scaling[14] = 0.1;
-        cost_scaling[15] = 0.1;
-        cost_scaling[16] = 0.1;
-        cost_scaling[17] = 0.1;
-        cost_scaling[18] = 0.1;
-        cost_scaling[19] = 0.1;
-        cost_scaling[20] = 1;
+        cost_scaling[0] = 0.13333333333333333;
+        cost_scaling[1] = 0.13333333333333333;
+        cost_scaling[2] = 0.13333333333333333;
+        cost_scaling[3] = 0.13333333333333333;
+        cost_scaling[4] = 0.13333333333333333;
+        cost_scaling[5] = 0.13333333333333333;
+        cost_scaling[6] = 0.13333333333333333;
+        cost_scaling[7] = 0.13333333333333333;
+        cost_scaling[8] = 0.13333333333333333;
+        cost_scaling[9] = 0.13333333333333333;
+        cost_scaling[10] = 0.13333333333333333;
+        cost_scaling[11] = 0.13333333333333333;
+        cost_scaling[12] = 0.13333333333333333;
+        cost_scaling[13] = 0.13333333333333333;
+        cost_scaling[14] = 0.13333333333333333;
+        cost_scaling[15] = 1;
         for (int i = 0; i <= N; i++)
         {
             ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "scaling", &cost_scaling[i]);
@@ -458,6 +479,73 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     }
 
     /**** Cost ****/
+    double* yref_0 = calloc(NY0, sizeof(double));
+    // change only the non-zero elements:
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "yref", yref_0);
+    free(yref_0);
+
+   double* W_0 = calloc(NY0*NY0, sizeof(double));
+    // change only the non-zero elements:
+    W_0[0+(NY0) * 0] = 5;
+    W_0[1+(NY0) * 1] = 5;
+    W_0[2+(NY0) * 2] = 10;
+    W_0[3+(NY0) * 3] = 100;
+    W_0[4+(NY0) * 4] = 0.01;
+    W_0[5+(NY0) * 5] = 0.01;
+    W_0[6+(NY0) * 6] = 0.01;
+    W_0[7+(NY0) * 7] = 0.01;
+    W_0[8+(NY0) * 8] = 0.01;
+    W_0[9+(NY0) * 9] = 0.01;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
+    free(W_0);
+    double* yref = calloc(NY, sizeof(double));
+    // change only the non-zero elements:
+
+    for (int i = 1; i < N; i++)
+    {
+        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "yref", yref);
+    }
+    free(yref);
+    double* W = calloc(NY*NY, sizeof(double));
+    // change only the non-zero elements:
+    W[0+(NY) * 0] = 5;
+    W[1+(NY) * 1] = 5;
+    W[2+(NY) * 2] = 10;
+    W[3+(NY) * 3] = 100;
+    W[4+(NY) * 4] = 0.01;
+    W[5+(NY) * 5] = 0.01;
+    W[6+(NY) * 6] = 0.01;
+    W[7+(NY) * 7] = 0.01;
+    W[8+(NY) * 8] = 0.01;
+    W[9+(NY) * 9] = 0.01;
+
+    for (int i = 1; i < N; i++)
+    {
+        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "W", W);
+    }
+    free(W);
+    double* yref_e = calloc(NYN, sizeof(double));
+    // change only the non-zero elements:
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
+    free(yref_e);
+
+    double* W_e = calloc(NYN*NYN, sizeof(double));
+    // change only the non-zero elements:
+    W_e[0+(NYN) * 0] = 50;
+    W_e[1+(NYN) * 1] = 50;
+    W_e[2+(NYN) * 2] = 100;
+    W_e[3+(NYN) * 3] = 200;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
+    free(W_e);
+    ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, 0, "nls_y_fun", &capsule->cost_y_0_fun);
+    ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, 0, "nls_y_fun_jac", &capsule->cost_y_0_fun_jac_ut_xt);
+    for (int i = 1; i < N; i++)
+    {
+        ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "nls_y_fun", &capsule->cost_y_fun[i-1]);
+        ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "nls_y_fun_jac", &capsule->cost_y_fun_jac_ut_xt[i-1]);
+    }
+    ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, N, "nls_y_fun", &capsule->cost_y_e_fun);
+    ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, N, "nls_y_fun_jac", &capsule->cost_y_e_fun_jac_ut_xt);
 
 
 
@@ -540,17 +628,17 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     double* lbu = lubu;
     double* ubu = lubu + NBU;
     lbu[0] = -2;
-    ubu[0] = 2;
+    ubu[0] = 100;
     lbu[1] = -2;
-    ubu[1] = 2;
+    ubu[1] = 100;
     lbu[2] = -2;
-    ubu[2] = 2;
+    ubu[2] = 100;
     lbu[3] = -2;
-    ubu[3] = 2;
+    ubu[3] = 100;
     lbu[4] = -2;
-    ubu[4] = 2;
+    ubu[4] = 100;
     lbu[5] = -2;
-    ubu[5] = 2;
+    ubu[5] = 100;
 
     for (int i = 0; i < N; i++)
     {
@@ -672,7 +760,7 @@ static void six_dof_robot_model_acados_create_set_opts(six_dof_robot_model_solve
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "levenberg_marquardt", &levenberg_marquardt);
 
     /* options QP solver */
-    int qp_solver_cond_N;const int qp_solver_cond_N_ori = 20;
+    int qp_solver_cond_N;const int qp_solver_cond_N_ori = 15;
     qp_solver_cond_N = N < qp_solver_cond_N_ori ? N : qp_solver_cond_N_ori; // use the minimum value here
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_N", &qp_solver_cond_N);
 
@@ -681,14 +769,6 @@ static void six_dof_robot_model_acados_create_set_opts(six_dof_robot_model_solve
 
     bool store_iterates = false;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "store_iterates", &store_iterates);
-    int log_primal_step_norm = false;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "log_primal_step_norm", &log_primal_step_norm);
-
-    int log_dual_step_norm = false;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "log_dual_step_norm", &log_dual_step_norm);
-
-    double nlp_solver_tol_min_step_norm = 0;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_min_step_norm", &nlp_solver_tol_min_step_norm);
     // set HPIPM mode: should be done before setting other QP solver options
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_hpipm_mode", "BALANCE");
 
@@ -700,75 +780,17 @@ static void six_dof_robot_model_acados_create_set_opts(six_dof_robot_model_solve
 
 
 
-    // set SQP specific options
-    double nlp_solver_tol_stat = 0.000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_stat", &nlp_solver_tol_stat);
+    int as_rti_iter = 1;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "as_rti_iter", &as_rti_iter);
 
-    double nlp_solver_tol_eq = 0.000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_eq", &nlp_solver_tol_eq);
+    int as_rti_level = 4;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "as_rti_level", &as_rti_level);
 
-    double nlp_solver_tol_ineq = 0.000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_ineq", &nlp_solver_tol_ineq);
+    int rti_log_residuals = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "rti_log_residuals", &rti_log_residuals);
 
-    double nlp_solver_tol_comp = 0.000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
-
-    int nlp_solver_max_iter = 100;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
-
-    // set options for adaptive Levenberg-Marquardt Update
-    bool with_adaptive_levenberg_marquardt = false;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "with_adaptive_levenberg_marquardt", &with_adaptive_levenberg_marquardt);
-
-    double adaptive_levenberg_marquardt_lam = 5;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_lam", &adaptive_levenberg_marquardt_lam);
-
-    double adaptive_levenberg_marquardt_mu_min = 0.0000000000000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_mu_min", &adaptive_levenberg_marquardt_mu_min);
-
-    double adaptive_levenberg_marquardt_mu0 = 0.001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_mu0", &adaptive_levenberg_marquardt_mu0);
-
-    double adaptive_levenberg_marquardt_obj_scalar = 2;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_obj_scalar", &adaptive_levenberg_marquardt_obj_scalar);
-
-    bool eval_residual_at_max_iter = false;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "eval_residual_at_max_iter", &eval_residual_at_max_iter);
-
-    // QP scaling
-    double qpscaling_ub_max_abs_eig = 100000;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_ub_max_abs_eig", &qpscaling_ub_max_abs_eig);
-
-    double qpscaling_lb_norm_inf_grad_obj = 0.0001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_lb_norm_inf_grad_obj", &qpscaling_lb_norm_inf_grad_obj);
-
-    qpscaling_scale_objective_type qpscaling_scale_objective = NO_OBJECTIVE_SCALING;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_scale_objective", &qpscaling_scale_objective);
-
-    ocp_nlp_qpscaling_constraint_type qpscaling_scale_constraints = NO_CONSTRAINT_SCALING;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_scale_constraints", &qpscaling_scale_constraints);
-
-    // NLP QP tol strategy
-    ocp_nlp_qp_tol_strategy_t nlp_qp_tol_strategy = FIXED_QP_TOL;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_strategy", &nlp_qp_tol_strategy);
-
-    double nlp_qp_tol_reduction_factor = 0.1;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_reduction_factor", &nlp_qp_tol_reduction_factor);
-
-    double nlp_qp_tol_safety_factor = 0.1;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_safety_factor", &nlp_qp_tol_safety_factor);
-
-    double nlp_qp_tol_min_stat = 0.000000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_stat", &nlp_qp_tol_min_stat);
-
-    double nlp_qp_tol_min_eq = 0.0000000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_eq", &nlp_qp_tol_min_eq);
-
-    double nlp_qp_tol_min_ineq = 0.0000000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_ineq", &nlp_qp_tol_min_ineq);
-
-    double nlp_qp_tol_min_comp = 0.00000000001;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_comp", &nlp_qp_tol_min_comp);
+    int rti_log_only_available_residuals = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "rti_log_only_available_residuals", &rti_log_only_available_residuals);
 
     bool with_anderson_acceleration = false;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "with_anderson_acceleration", &with_anderson_acceleration);
@@ -777,6 +799,8 @@ static void six_dof_robot_model_acados_create_set_opts(six_dof_robot_model_solve
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
 
+    int qp_solver_warm_start = 1;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_warm_start", &qp_solver_warm_start);
 
     int print_level = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
@@ -963,7 +987,7 @@ int six_dof_robot_model_acados_update_params(six_dof_robot_model_solver_capsule*
 {
     int solver_status = 0;
 
-    int casadi_np = 0;
+    int casadi_np = 6;
     if (casadi_np != np) {
         printf("acados_update_params: trying to set %i parameters for external functions."
             " External function has %i parameters. Exiting.\n", np, casadi_np);
@@ -1042,6 +1066,17 @@ int six_dof_robot_model_acados_free(six_dof_robot_model_solver_capsule* capsule)
     free(capsule->expl_ode_fun);
 
     // cost
+    external_function_external_param_casadi_free(&capsule->cost_y_0_fun);
+    external_function_external_param_casadi_free(&capsule->cost_y_0_fun_jac_ut_xt);
+    for (int i = 0; i < N - 1; i++)
+    {
+        external_function_external_param_casadi_free(&capsule->cost_y_fun[i]);
+        external_function_external_param_casadi_free(&capsule->cost_y_fun_jac_ut_xt[i]);
+    }
+    free(capsule->cost_y_fun);
+    free(capsule->cost_y_fun_jac_ut_xt);
+    external_function_external_param_casadi_free(&capsule->cost_y_e_fun);
+    external_function_external_param_casadi_free(&capsule->cost_y_e_fun_jac_ut_xt);
 
     // constraints
 
@@ -1065,29 +1100,19 @@ void six_dof_robot_model_acados_print_stats(six_dof_robot_model_solver_capsule* 
         printf("stat_n_max = %d is too small, increase it in the template!\n", stat_n_max);
         exit(1);
     }
-    double stat[1600];
+    double stat[800];
     ocp_nlp_get(capsule->nlp_solver, "statistics", stat);
 
     int nrow = nlp_iter+1 < stat_m ? nlp_iter+1 : stat_m;
 
 
-    printf("iter\tres_stat\tres_eq\t\tres_ineq\tres_comp\tqp_stat\tqp_iter\talpha");
-    if (stat_n > 8)
-        printf("\t\tqp_res_stat\tqp_res_eq\tqp_res_ineq\tqp_res_comp");
-    printf("\n");
+    printf("iter\tqp_stat\tqp_iter\n");
     for (int i = 0; i < nrow; i++)
     {
         for (int j = 0; j < stat_n + 1; j++)
         {
-            if (j == 0 || j == 5 || j == 6)
-            {
-                tmp_int = (int) stat[i + j * nrow];
-                printf("%d\t", tmp_int);
-            }
-            else
-            {
-                printf("%e\t", stat[i + j * nrow]);
-            }
+            tmp_int = (int) stat[i + j * nrow];
+            printf("%d\t", tmp_int);
         }
         printf("\n");
     }

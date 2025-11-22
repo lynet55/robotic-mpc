@@ -39,7 +39,7 @@
 #define SIX_DOF_ROBOT_MODEL_NX     12
 #define SIX_DOF_ROBOT_MODEL_NZ     0
 #define SIX_DOF_ROBOT_MODEL_NU     6
-#define SIX_DOF_ROBOT_MODEL_NP     0
+#define SIX_DOF_ROBOT_MODEL_NP     6
 #define SIX_DOF_ROBOT_MODEL_NP_GLOBAL     0
 #define SIX_DOF_ROBOT_MODEL_NBX    0
 #define SIX_DOF_ROBOT_MODEL_NBX0   12
@@ -61,10 +61,10 @@
 #define SIX_DOF_ROBOT_MODEL_NG     0
 #define SIX_DOF_ROBOT_MODEL_NBXN   0
 #define SIX_DOF_ROBOT_MODEL_NGN    0
-#define SIX_DOF_ROBOT_MODEL_NY0    0
-#define SIX_DOF_ROBOT_MODEL_NY     0
-#define SIX_DOF_ROBOT_MODEL_NYN    0
-#define SIX_DOF_ROBOT_MODEL_N      20
+#define SIX_DOF_ROBOT_MODEL_NY0    10
+#define SIX_DOF_ROBOT_MODEL_NY     10
+#define SIX_DOF_ROBOT_MODEL_NYN    4
+#define SIX_DOF_ROBOT_MODEL_N      15
 #define SIX_DOF_ROBOT_MODEL_NH     0
 #define SIX_DOF_ROBOT_MODEL_NHN    0
 #define SIX_DOF_ROBOT_MODEL_NH0    0
@@ -107,9 +107,18 @@ typedef struct six_dof_robot_model_solver_capsule
 
     // cost
 
+    external_function_external_param_casadi *cost_y_fun;
+    external_function_external_param_casadi *cost_y_fun_jac_ut_xt;
 
 
 
+    external_function_external_param_casadi cost_y_0_fun;
+    external_function_external_param_casadi cost_y_0_fun_jac_ut_xt;
+
+
+
+    external_function_external_param_casadi cost_y_e_fun;
+    external_function_external_param_casadi cost_y_e_fun_jac_ut_xt;
 
 
     // constraints
