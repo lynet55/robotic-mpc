@@ -133,5 +133,10 @@ def run_sim():
 
     vis.animate_3d_trajectory(p_euler[0], p_euler[1], p_euler[2])
 
+    M0 = robot.compute_inertia_matrix(q_0)
+    print("Inertia matrix at q0:")
+    print(M0.shape)
+    print(np.array2string(M0, formatter={'float_kind':lambda x: f"{x:8.4f}"}))
+
 if __name__ == "__main__":
     run_sim()

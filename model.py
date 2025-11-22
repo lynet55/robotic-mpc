@@ -234,6 +234,16 @@ class Robot:
             y[7:,k] = self._diff_kinematic(q, qdot)
 
         return y
+    
+    def compute_inertia_matrix(self, q):
+        model = self._urdf_loader.model
+        data = self._urdf_loader.data
+    
+        # Calcolo della matrice di inerzia tramite CRBA
+        M = pin.crba(model, data, q)
+        M = (M + M.T) * 0.5       # Simmetrizzazione numerica, consigliata da Pinocchio
+
+        return M
 
 
 
