@@ -83,21 +83,32 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
     #Control Loop
     for t in range(total_time - 1):
 
+        #State Feedback and Refferences
         current_q = q[t]
         current_q_dot = q_dot[t]
         current_ee_pose_world = ee_pose_world[t]
         current_ee_velocity_world = ee_velocity_world[t]
 
+        x_ref, y_ref, z_ref = trajectory_points_surface[t]
 
-        current_state = np.concatenate((current_q, current_q_dot))
+        #MPC Inputs
+        current_state = np.concatenate((current_q, current_q_dot)) #[q, q_dot] * 6 i.e joint positions and velocities for 6 DOF robot
+        decision_variables = np.concatenate((task_origin_surfac)) #[x_ref, y_ref, z_ref, roll_ref, pitch_ref, yaw_ref] i.e pose of task frame in surface frame
         solver.set(0, 'lbx', current_state)
         solver.set(0, 'ubx', current_state)
+        solver.set(i, "y_ref", decision_variables)
         status = solver.solve()
         optimal_control = solver.get(0, "u")
 
+        #State Update and State Feedback
         next_state = model.update(current_state, optimal_control)
         q1, q2, q3, q4, q5, q6 = next_state[:model.n_dof]
+        q[t + 1] = next_state[:model.n_dof]
+        q_dot[t + 1] = next_state[model.n_dof:]
+        ee_pose_world[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
+        ee_velocity_world[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
 
+        #Visual Update
         scene.set_joint_angles({
             "shoulder_pan_joint": q1,
             "shoulder_lift_joint": q2,
@@ -106,24 +117,9 @@ def run_sim(scene, model, solver, total_time, delay_time: float = 1.0):
             "wrist_2_joint": q5,
             "wrist_3_joint": q6
         })
-
-        # Extract position and velocity from the integrated state
-        q[t + 1] = next_state[:model.n_dof]
-        q_dot[t + 1] = next_state[model.n_dof:]
-        
-        # Compute end-effector kinematics (flatten to 1D arrays)
-        ee_pose_world[t + 1] = np.array(model.forward_kinematics(q[t + 1])).flatten()
-        ee_velocity_world[t + 1] = np.array(model.differential_kinematics(q[t + 1], q_dot[t + 1])).flatten()
-
-        # Move task frame along x in surface coordinates
-        # x_new_task_origin_surface = task_origin_surface[0] - 0.001
-        # y_new_task_origin_surface = task_origin_surface[1]
-        # task_origin_surface, task_origin_world = surface.get_point_on_surface(x_new_task_origin_surface, y_new_task_origin_surface)
-        
-        task_origin_world = trajectory_points_surface[t + 1]
         scene.update_triad("frames/end_effector_frame", position=ee_pose_world[t][:3], orientation_rpy=scene.quaternion_to_euler_numpy(ee_pose_world[t][3:]))
-        scene.update_triad("frames/task_frame", position=task_origin_world, orientation_rpy=surface.get_rpy(task_origin_world[0], task_origin_world[1]))
-        scene.update_line("lines/ee_trajectory", points=np.array(ee_pose_world[t + 1][:3]).reshape(-1, 3))
+        scene.update_triad("frames/task_frame", position=trajectory_points_surface[t + 1], orientation_rpy=surface.get_rpy(task_origin_world[0], task_origin_world[1]))
+        scene.update_line("lines/ee_trajectory", points=np.array(ee_pose_world[t + 1][:3]).reshape(-1, 3))''
 
         if (t + 1) % 10 == 0:
             print(f"time:  {t}")
@@ -141,6 +137,8 @@ if __name__ == "__main__":
     surface_origin = np.array([-0.5, 1.5, 0.2])
     surface_orientation_rpy = np.array([0.9, 0.0, 0.4])
 
+    qdot_0 = np.array([2,2,0,0,0,5], dtype=np.float64)
+    q_0 = np.zeros([6])
 
     robot_loader = urdf("ur5")
     scene = robot_visualizer(robot_loader)
@@ -154,8 +152,6 @@ if __name__ == "__main__":
         integration_method="RK2"
     )
 
-    qdot_0 = np.array([2,2,0,0,0,5], dtype=np.float64)
-    q_0 = np.zeros([6])
     robot.set_initial_state(np.hstack((q_0, qdot_0)))
 
     mpc = model_predictive_control(
