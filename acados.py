@@ -6,7 +6,7 @@ class MPC:
     
     def __init__(self, surface, state, initial_state, control_input, dynamics, 
                  forward_kinematics, differential_kinematics,
-                 surface_position=None, surface_orientation_rpy=None, 
+                 surface_position=None, surface_rpy=None, 
                  desired_offset=1.0):
         """
         Initialize MPC controller with explicit dependencies.
@@ -19,13 +19,13 @@ class MPC:
             forward_kinematics: CasADi Function that maps q -> [px, py, pz, qx, qy, qz, qw]
             differential_kinematics: CasADi Function that maps (q, q_dot) -> [vx, vy, vz, wx, wy, wz]
             surface_position: 3D position of surface origin [x, y, z]
-            surface_orientation_rpy: Surface orientation as [roll, pitch, yaw] in radians
+            surface_rpy: Surface orientation as [roll, pitch, yaw] in radians
             desired_offset: Desired offset distance from surface (default: 1.0)
         """
         self._surface_expression = surface.get_quadratic_surface()
         self._state = state
-        self.surface_position = surface.get_position()
-        self.surface_orientation_rpy = surface.get_orientation_rpy()
+        self.surface_pos_world = surface.get_position()
+        self.surface_rpy_world = surface.get_orientation_rpy()
         self.desired_offset = surface.get_desired_offset()
 
         self.ocp = AcadosOcp()
@@ -58,64 +58,20 @@ class MPC:
         q_dot = state[n_dof:]
         
         # Call the kinematics functions with the state
-        ee_pose = forward_kinematics(q)  # Returns [px, py, pz, qx, qy, qz, qw]
-        ee_vel = differential_kinematics(q, q_dot)  # Returns [vx, vy, vz, wx, wy, wz]
+        ee_x_world, ee_y_world, ee_z_world, qx, qy, qz, qw = forward_kinematics(q)
+        ee_vx_world, ee_vy_world, ee_vz_world, ee_wx_world, ee_wy_world, ee_wz_world = differential_kinematics(q, q_dot)  # Returns [vx, vy, vz, wx, wy, wz]
 
-        
-        # Extract Cartesian position and velocity components (world frame)
-        px_world = ee_pose[0]
-        py_world = ee_pose[1]
-        pz_world = ee_pose[2]
-        
-        vx = ee_vel[0]
-        vy = ee_vel[1]
-        vz = ee_vel[2]
-        
-        # Create rotation matrix from RPY (Roll-Pitch-Yaw) for surface frame
-        roll = self.surface_orientation_rpy[0]
-        pitch = self.surface_orientation_rpy[1]
-        yaw = self.surface_orientation_rpy[2]
-        
-        # Rotation matrices for each axis
-        Rx = ca.vertcat(
-            ca.horzcat(1, 0, 0),
-            ca.horzcat(0, ca.cos(roll), -ca.sin(roll)),
-            ca.horzcat(0, ca.sin(roll), ca.cos(roll))
-        )
-        
-        Ry = ca.vertcat(
-            ca.horzcat(ca.cos(pitch), 0, ca.sin(pitch)),
-            ca.horzcat(0, 1, 0),
-            ca.horzcat(-ca.sin(pitch), 0, ca.cos(pitch))
-        )
-        
-        Rz = ca.vertcat(
-            ca.horzcat(ca.cos(yaw), -ca.sin(yaw), 0),
-            ca.horzcat(ca.sin(yaw), ca.cos(yaw), 0),
-            ca.horzcat(0, 0, 1)
-        )
-        
-        # Combined rotation matrix: R = Rz * Ry * Rx
-        R_world_to_surf = Rz @ Ry @ Rx
-        
-        # Transform EE position from world frame to surface frame
-        ee_pos_world = ca.vertcat(px_world, py_world, pz_world)
-        surf_pos = ca.vertcat(self.surface_position[0], self.surface_position[1], self.surface_position[2])
-        
-        # Position in surface frame = R^T * (p_world - p_surface)
-        ee_pos_surf = R_world_to_surf.T @ (ee_pos_world - surf_pos)
+        ee_pos_world = ca.vertcat(ee_x_world, ee_y_world, ee_z_world)
+        surface_pos_world = ca.vertcat(self.surface_pos_world[0], self.surface_pos_world[1], self.surface_pos_world[2])
+        surface_rpy_world = ca.vertcat(self.surface_rpy_world[0], self.surface_rpy_world[1], self.surface_rpy_world[2])
 
-        
-        # Extract surface frame coordinates
-        px_surf = ee_pos_surf[0]  # x in surface frame
-        py_surf = ee_pos_surf[1]  # y in surface frame
-        pz_surf = ee_pos_surf[2]  # z in surface frame (perpendicular to surface)
+        ee_pos_surf, ee_rpy_surf  = self._ee_to_surface(ee_pos_world, surf_pos_world, surface_rpy_world)
         
         # Evaluate surface height at current x,y position in surface frame
         # The surface expression should use px_surf and py_surf
-        surface_height = ca.substitute(self._surface_expression, 
-                                        ca.vertcat(ca.SX.sym("x"), ca.SX.sym("y")),
-                                        ca.vertcat(px_surf, py_surf))
+        # surface_height = ca.substitute(self._surface_expression, 
+        #                                 ca.vertcat(ca.SX.sym("x"), ca.SX.sym("y")),
+        #                                 ca.vertcat(p, py_surf))
 
         # Cost function weights
         w_position_xy = 5.0     # Weight for tracking surface in x-y
@@ -123,8 +79,6 @@ class MPC:
         w_velocity = 0.1
         w_orientation = 1.0     # Weight for perpendicular orientation
 
-        # Surface tracking errors
-        # Error in z-direction: maintain offset of desired_offset above surface
         z_error = pz_surf - (surface_height + self.desired_offset)
         
 
@@ -144,7 +98,9 @@ class MPC:
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
         # Initial state (12 dimensions for 6-DOF robot: [q(6), q_dot(6)])
-        self.x0 = initial_state  # All joints at zero position and velocity
+        self.x0 = initial_state
         self.ocp.constraints.x0 = initial_state
         
         self.solver = AcadosOcpSolver(self.ocp, json_file='acados_ocp.json')
+
+    def ee_to_surface(self, ee_pose_world):
