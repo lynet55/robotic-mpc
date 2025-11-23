@@ -131,7 +131,7 @@ class Surface:
         
         pitch = ca.asin(-nx_norm)
         roll = ca.atan2(ny_norm, nz_norm)
-        yaw = 0.0
+        yaw = -2 *ca.pi
         
         rpy = ca.vertcat(roll, pitch, yaw)
         

@@ -73,14 +73,14 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
         orientation_rpy=np.array([0.0, 0.0, 0.0]),
         path="frames/end_effector_frame",
         scale=0.2,
-        line_width=1.0
+        line_width=2.0
     )
     scene.add_triad(
         position=task_origin_world,
         orientation_rpy=initial_task_orientation,
         path="frames/task_frame",
         scale=0.2,
-        line_width=1.0
+        line_width=2.0
     )
         
     #Control Loop
