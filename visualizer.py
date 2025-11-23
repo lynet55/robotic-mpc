@@ -389,33 +389,3 @@ class MeshCatVisualizer:
             
             node.set_transform(T)
     
-    def quaternion_to_euler_numpy(self, quat):
-        """
-        Convert quaternion to Euler angles using numpy only.
-        
-        Args:
-            quat: [qx, qy, qz, qw] as numpy array
-        
-        Returns:
-            [roll, pitch, yaw] as numpy array
-        """
-        qx, qy, qz, qw = quat[0], quat[1], quat[2], quat[3]
-        
-        # Roll (x-axis rotation)
-        sinr_cosp = 2 * (qw * qx + qy * qz)
-        cosr_cosp = 1 - 2 * (qx * qx + qy * qy)
-        roll = np.arctan2(sinr_cosp, cosr_cosp)
-        
-        # Pitch (y-axis rotation)
-        sinp = 2 * (qw * qy - qz * qx)
-        if abs(sinp) >= 1:
-            pitch = np.copysign(np.pi / 2, sinp)  # Use 90 degrees if out of range
-        else:
-            pitch = np.arcsin(sinp)
-        
-        # Yaw (z-axis rotation)
-        siny_cosp = 2 * (qw * qz + qx * qy)
-        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
-        yaw = np.arctan2(siny_cosp, cosy_cosp)
-        
-        return np.array([roll, pitch, yaw])

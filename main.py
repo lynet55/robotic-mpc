@@ -59,7 +59,7 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
 
 
     #Scene visualization
-    scene.add_line( np.array(ee_pose_world[0][:3]).reshape(-1, 3), path="lines/ee_trajectory", color=0xFF0000, line_width=2.0)
+    scene.add_line(np.array(ee_pose_world[0][:3]).reshape(-1, 3), path="lines/ee_trajectory", color=0xFF0000, line_width=2.0)
     scene.add_line(trajectory_points_surface, path="lines/task_reference", color=0x0000FF, line_width=2.0)
     scene.add_triad(
         position=surface.get_position(),
@@ -138,7 +138,7 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
         })
         scene.update_triad("frames/end_effector_frame", position=ee_pose_world[t][:3], orientation_rpy=ee_pose_world[t][3:6])
         scene.update_triad("frames/task_frame", position=task_xyz_surface, orientation_rpy=surface.get_rpy(task_xyz_surface[0], task_xyz_surface[1]))
-        scene.update_line("lines/ee_trajectory", points=np.array(ee_pose_world[t][:3]).reshape(-1, 3))
+        scene.update_line("lines/ee_trajectory", points=ee_pose_world[:t+1, :3])
         
         q[t + 1] = next_state[:model.n_dof]
         q_dot[t + 1] = next_state[model.n_dof:]
