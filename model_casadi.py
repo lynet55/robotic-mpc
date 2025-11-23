@@ -69,10 +69,11 @@ class SixDofRobot:
         q_dot_sym = ca.SX.sym('q_dot', self.n_dof)
         
         # Forward kinematics using CasADi Pinocchio (also updates joint placements)
-        cpin.forwardKinematics(self._cmodel, self._cdata, q_sym)
+        
         
         # Update all frame placements (including end-effector)
-        cpin.framesForwardKinematics(self._cmodel, self._cdata, q_sym)
+        cpin.forwardKinematics(self._cmodel, self._cdata, q_sym)
+        cpin.updateFramePlacements(self._cmodel, self._cdata)
         
         # Get end-effector frame placement from data (use CasADi model frame ID)
         ee_transform = self._cdata.oMf[self._cee_frame_id]

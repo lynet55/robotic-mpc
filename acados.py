@@ -215,18 +215,28 @@ class MPC:
             CasADi expression representing the transformed point
         """
    
-        Rx = ca.vertcat(
-            ca.horzcat(1, 0, 0),
-            ca.horzcat(0, -1, 0),
-            ca.horzcat(0, 0, -1)
+        s = ca.sin(np.pi)
+        c = ca.cos(np.pi)
+         # Translation vector: 0.3 unit in z-direction
+        translation = ca.vertcat(0, 0, 0.1)
+         
+         # Build homogeneous transform H = [R t; 0 0 0 1]
+        H = ca.vertcat(
+             ca.horzcat(1, 0, 0, translation[0]),
+             ca.horzcat(0, c, -s, translation[1]),
+             ca.horzcat(0, s,  c, translation[2]),
+             ca.horzcat(0, 0, 0, 1)
+         )
+         
+         # Apply homogeneous transform to point: p' = H * [p; 1]
+        point_h = ca.vertcat(point, 1)
+        transformed_point_h = H @ point_h
+        transformed_point = ca.vertcat(
+             transformed_point_h[0],
+             transformed_point_h[1],
+             transformed_point_h[2]
         )
-        
-        # Translation vector: 1 unit in z-direction
-        translation = ca.vertcat(0, 0, 0.3)
-        
-        # Apply rotation then translation: p' = Rx @ p + t
-        transformed_point = Rx @ point + translation
-        
+         
         return transformed_point
     
 
