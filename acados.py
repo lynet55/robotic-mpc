@@ -39,7 +39,8 @@ class MPC:
         self.ocp.solver_options.qp_solver_warm_start = 1
         self.ocp.solver_options.qp_solver_iter_max = 50
         self.ocp.solver_options.nlp_solver_max_iter = 50
-        self.ocp.solver_options.tf = 2.0
+        self.ocp.solver_options.tf = 1.5
+        self.ocp.solver_options.qp_solver_cond_N = 5
         self.ocp.dims.N = 15
 
         self.ocp.model.name = 'six_dof_robot_model'
@@ -112,16 +113,16 @@ class MPC:
             # ee_vx_world - v_ref[0],
             # ee_vy_world - v_ref[1],
             # ee_vz_world - v_ref[2],
-            1.0 - normal_alignment,
+            # 1.0 - normal_alignment,
             control_input - u_ref
         )
         
         
         # Cost function weights
-        w_task_xy_surface = 5.0 
+        w_task_xy_surface = 100.0 
         w_task_z_surface = 10.0     
         w_task_velocity_xyz_surface = 0.1
-        w_task_normal_surface = 100.0  # High weight for orientation alignment
+        # w_task_normal_surface = 100.0  # High weight for orientation alignment
         w_control_input = 0.01
         
         W = np.diag([
@@ -131,7 +132,7 @@ class MPC:
             # w_task_velocity_xyz_surface, # vx
             # w_task_velocity_xyz_surface, # vy
             # w_task_velocity_xyz_surface, # vz
-            w_task_normal_surface,       # alignment error
+            # w_task_normal_surface,       # alignment error
             w_control_input,             # u[0]
             w_control_input,             # u[1]
             w_control_input,             # u[2]

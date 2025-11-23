@@ -102,39 +102,48 @@ class Surface:
         
     def get_rpy_function(self):
         """
-        Create a CasAdi function that computes RPY angles at any point on the surface.
-        The RPY represents the orientation where the z-axis aligns with the surface normal.
-        
-        Returns:
-            CasAdi Function that takes (x, y) and returns [roll, pitch, yaw]
+        Create a CasADi function that computes RPY angles at any (x, y) point 
+        on the surface. Produces a full rotation whose Z axis aligns with 
+        the surface normal and whose X axis is tangent and aligned with the 
+        projection of global X so yaw is well-defined.
         """
-        # Get the normal vector
+
+        # Partial derivatives
         dz_dx = ca.jacobian(self.quadratic_surface, self.x)
         dz_dy = ca.jacobian(self.quadratic_surface, self.y)
-        
-        # Normal vector components (unnormalized for efficiency)
+
+        # Unnormalized normal
         nx = -dz_dx
         ny = -dz_dy
         nz = 1.0
-        
+
         # Normalize
         norm = ca.sqrt(nx**2 + ny**2 + nz**2)
-        nx_norm = nx / norm
-        ny_norm = ny / norm
-        nz_norm = nz / norm
-        
-        # Convert normal vector to RPY angles
-        # The normal vector becomes the z-axis of the local frame
-        # pitch = asin(-nx_norm)  (rotation about y-axis)
-        # roll = atan2(ny_norm, nz_norm)  (rotation about x-axis)
-        # yaw = 0  (no rotation about z-axis, arbitrary choice)
-        
-        pitch = ca.asin(-nx_norm)
-        roll = ca.atan2(ny_norm, nz_norm)
-        yaw = -2 *ca.pi
-        
+        nx = nx / norm
+        ny = ny / norm
+        nz = nz / norm
+
+        # Normal vector
+        n = ca.vertcat(nx, ny, nz)
+        # Global X basis
+        ex = ca.vertcat(1.0, 0.0, 0.0)
+        # Project global X onto tangent plane to define local X axis
+        ex_proj = ex - (ca.dot(ex, n) * n)
+        # Normalize local X
+        ex_norm = ex_proj / ca.sqrt(ca.dot(ex_proj, ex_proj))
+        # Local Y axis = n × ex_norm
+        ey_norm = ca.cross(n, ex_norm)
+        # Rotation matrix R (columns are local axes)
+        R = ca.hcat([ex_norm, ey_norm, n])
+
+        # Extract RPY from rotation matrix assuming XYZ Euler (roll → pitch → yaw)
+        # roll
+        roll = ca.atan2(R[2,1], R[2,2])
+        # pitch
+        pitch = -ca.asin(R[2,0])
+        # yaw
+        yaw = ca.atan2(R[1,0], R[0,0])
         rpy = ca.vertcat(roll, pitch, yaw)
-        
         return ca.Function("surface_rpy", [self.x, self.y], [rpy])
     
     def get_rpy(self, x_surface, y_surface):
