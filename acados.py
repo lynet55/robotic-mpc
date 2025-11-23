@@ -117,16 +117,16 @@ class MPC:
             # ee_vx_world - v_ref[0],
             # ee_vy_world - v_ref[1],
             # ee_vz_world - v_ref[2],
-            # 1.0 - normal_alignment,
+            1.0 - normal_alignment,
             control_input - u_ref
         )
         
         
         # Cost function weights
         w_task_xy_surface = 100.0 
-        w_task_z_surface = 10.0     
-        w_task_velocity_xyz_surface = 0.1
-        # w_task_normal_surface = 100.0  # High weight for orientation alignment
+        w_task_z_surface = 100.0     
+        w_task_velocity_xyz_surface = 50.0
+        w_task_normal_surface = 100.0  # High weight for orientation alignment
         w_control_input = 0.01
         
         W = np.diag([
@@ -136,7 +136,7 @@ class MPC:
             # w_task_velocity_xyz_surface, # vx
             # w_task_velocity_xyz_surface, # vy
             # w_task_velocity_xyz_surface, # vz
-            # w_task_normal_surface,       # alignment error
+            w_task_normal_surface,       # alignment error
             w_control_input,             # u[0]
             w_control_input,             # u[1]
             w_control_input,             # u[2]
@@ -166,15 +166,29 @@ class MPC:
             1.0 - normal_alignment
         )
         
-        W_e = np.diag([50.0, 50.0, 100.0, 200.0])  # Higher terminal weights
+        w_terminal_task_xy_surface = 100
+        w_terminal_task_z_surface = 100
+        w_terminal_normal_alignment = 0.0
+        w_terminal_control_input = 0.0
+
+        W_e = np.diag([
+            w_terminal_task_xy_surface,           # x position
+            w_terminal_task_xy_surface,           # y position
+            w_terminal_task_z_surface,            # z position (offset)
+            w_terminal_control_input,             # u[0]
+        ])  # Higher terminal weights
+
         self.ocp.cost.cost_type_e = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr_e = h_e
         self.ocp.cost.W_e = W_e
         self.ocp.cost.yref_e = np.zeros(W_e.shape[0])
 
         # Control input bounds (joint velocity commands)
-        self.ocp.constraints.lbu = np.array([-2.0, -2.0, -2.0, -2.0, -2.0, -2.0])
-        self.ocp.constraints.ubu = np.array([100.0, 100.0, 100.0, 100.0, 100.0, 100.0])
+        q_dot_max = 10.0  # Maximum joint velocity command
+
+        # Control input bounds (joint velocity commands)
+        self.ocp.constraints.lbu = np.array([-q_dot_max] * 6)
+        self.ocp.constraints.ubu = np.array([q_dot_max] * 6)
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
         # Initial state constraint will be set at runtime
@@ -182,30 +196,6 @@ class MPC:
 
         self.solver = AcadosOcpSolver(self.ocp, json_file='acados_ocp.json')
 
-    def _ee_to_surface_transform(self, point_world, surface_pos_world, surface_rpy_world):
-        """
-        Transform a point from world frame to surface frame.
-        
-        Args:
-            point_world: CasADi expression for point in world frame [x, y, z]
-            surface_pos_world: Surface position in world frame
-            surface_rpy_world: Surface orientation (roll, pitch, yaw)
-        
-        Returns:
-            CasADi expression for point in surface frame
-        """
-        # Translation: move to surface origin
-        point_translated = point_world - surface_pos_world + np.array([0.0, 0.0, 0.1])
-        
-        # Rotation from world to surface frame (inverse of surface orientation)
-        # For simplicity, assuming surface frame aligned with world
-        # You should implement proper rotation based on surface_rpy_world
-        
-        # Placeholder: just translation for now
-        # TODO: Add proper rotation matrix based on RPY
-        transformed_point = point_translated
-        
-        return transformed_point
     
     def _ee_to_surface_transform_2(self, point):
         """
@@ -220,9 +210,9 @@ class MPC:
             CasADi expression representing the transformed point
         """
    
-        s = ca.sin(np.pi)
-        c = ca.cos(np.pi)
-         # Translation vector: 0.3 unit in z-direction
+        s = ca.sin(0.0)
+        c = ca.cos(0.0)
+    
         translation = ca.vertcat(0, 0, 0.1)
          
          # Build homogeneous transform H = [R t; 0 0 0 1]

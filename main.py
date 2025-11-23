@@ -48,7 +48,7 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
 
     # task_origin_surface, task_origin_world = surface.get_random_point_on_surface()
     task_origin_surface, task_origin_world = surface.get_point_on_surface(surface.limits[0][0] + 5.0 , surface.limits[1][0] + 5.0)
-    trajectory_points_surface = surface.generate_simple_trajectory(task_origin_surface, time_increment=0.1, x_margin_surface=5, y_margin_surface=5, x_step=10, y_step=5)
+    trajectory_points_surface = surface.generate_simple_trajectory(task_origin_surface, time_increment=0.10, x_margin_surface=5, y_margin_surface=5, x_step=10, y_step=5)
     initial_task_orientation = np.array([0.0, 0.0, 0.0])
     
     # Data structures
@@ -94,7 +94,10 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
         current_ee_velocity_world = ee_velocity_world[t]
 
         optimal_control = np.zeros(model.n_dof)
-        task_xyz_surface = trajectory_points_surface[600]
+
+
+        if t % 100 == 0:
+            task_xyz_surface = trajectory_points_surface[t]
 
         # task_velocity_xyz_surface = 1.0, 1.0, 1.0
         task_normal_surface = surface.get_normal_vector(task_xyz_surface[0], task_xyz_surface[1])
