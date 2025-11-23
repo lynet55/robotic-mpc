@@ -94,7 +94,7 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
         current_ee_velocity_world = ee_velocity_world[t]
 
         optimal_control = np.zeros(model.n_dof)
-        task_xyz_surface = trajectory_points_surface[1100]
+        task_xyz_surface = trajectory_points_surface[600]
 
         # task_velocity_xyz_surface = 1.0, 1.0, 1.0
         task_normal_surface = surface.get_normal_vector(task_xyz_surface[0], task_xyz_surface[1])

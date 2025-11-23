@@ -438,28 +438,28 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     {
         // set time_steps
     
-        double time_step = 0.13333333333333333;
+        double time_step = 0.1;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
         }
         // set cost scaling
         double* cost_scaling = malloc((N+1)*sizeof(double));
-        cost_scaling[0] = 0.13333333333333333;
-        cost_scaling[1] = 0.13333333333333333;
-        cost_scaling[2] = 0.13333333333333333;
-        cost_scaling[3] = 0.13333333333333333;
-        cost_scaling[4] = 0.13333333333333333;
-        cost_scaling[5] = 0.13333333333333333;
-        cost_scaling[6] = 0.13333333333333333;
-        cost_scaling[7] = 0.13333333333333333;
-        cost_scaling[8] = 0.13333333333333333;
-        cost_scaling[9] = 0.13333333333333333;
-        cost_scaling[10] = 0.13333333333333333;
-        cost_scaling[11] = 0.13333333333333333;
-        cost_scaling[12] = 0.13333333333333333;
-        cost_scaling[13] = 0.13333333333333333;
-        cost_scaling[14] = 0.13333333333333333;
+        cost_scaling[0] = 0.1;
+        cost_scaling[1] = 0.1;
+        cost_scaling[2] = 0.1;
+        cost_scaling[3] = 0.1;
+        cost_scaling[4] = 0.1;
+        cost_scaling[5] = 0.1;
+        cost_scaling[6] = 0.1;
+        cost_scaling[7] = 0.1;
+        cost_scaling[8] = 0.1;
+        cost_scaling[9] = 0.1;
+        cost_scaling[10] = 0.1;
+        cost_scaling[11] = 0.1;
+        cost_scaling[12] = 0.1;
+        cost_scaling[13] = 0.1;
+        cost_scaling[14] = 0.1;
         cost_scaling[15] = 1;
         for (int i = 0; i <= N; i++)
         {
@@ -486,16 +486,15 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
 
    double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[0+(NY0) * 0] = 5;
-    W_0[1+(NY0) * 1] = 5;
+    W_0[0+(NY0) * 0] = 100;
+    W_0[1+(NY0) * 1] = 100;
     W_0[2+(NY0) * 2] = 10;
-    W_0[3+(NY0) * 3] = 100;
+    W_0[3+(NY0) * 3] = 0.01;
     W_0[4+(NY0) * 4] = 0.01;
     W_0[5+(NY0) * 5] = 0.01;
     W_0[6+(NY0) * 6] = 0.01;
     W_0[7+(NY0) * 7] = 0.01;
     W_0[8+(NY0) * 8] = 0.01;
-    W_0[9+(NY0) * 9] = 0.01;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* yref = calloc(NY, sizeof(double));
@@ -508,16 +507,15 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     free(yref);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[0+(NY) * 0] = 5;
-    W[1+(NY) * 1] = 5;
+    W[0+(NY) * 0] = 100;
+    W[1+(NY) * 1] = 100;
     W[2+(NY) * 2] = 10;
-    W[3+(NY) * 3] = 100;
+    W[3+(NY) * 3] = 0.01;
     W[4+(NY) * 4] = 0.01;
     W[5+(NY) * 5] = 0.01;
     W[6+(NY) * 6] = 0.01;
     W[7+(NY) * 7] = 0.01;
     W[8+(NY) * 8] = 0.01;
-    W[9+(NY) * 9] = 0.01;
 
     for (int i = 1; i < N; i++)
     {
@@ -760,7 +758,7 @@ static void six_dof_robot_model_acados_create_set_opts(six_dof_robot_model_solve
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "levenberg_marquardt", &levenberg_marquardt);
 
     /* options QP solver */
-    int qp_solver_cond_N;const int qp_solver_cond_N_ori = 15;
+    int qp_solver_cond_N;const int qp_solver_cond_N_ori = 5;
     qp_solver_cond_N = N < qp_solver_cond_N_ori ? N : qp_solver_cond_N_ori; // use the minimum value here
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_N", &qp_solver_cond_N);
 
