@@ -40,7 +40,7 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
     q = np.zeros((total_time, model.n_dof)) # joint positions
     q_dot = np.zeros((total_time, model.n_dof)) # joint velocities
 
-    ee_pose_world = np.zeros((total_time, 7)) # end-effector pose [x, y, z, qx, qy, qz, qw]
+    ee_pose_world = np.zeros((total_time, 6)) # end-effector pose [x, y, z, roll, pitch, yaw]
     ee_velocity_world = np.zeros((total_time, 6)) # end-effector velocity [q_dot_x, qdot_y, qdot_z, wx, wy, wz]
 
     solver = mpc.solver
@@ -133,7 +133,7 @@ def run_sim(scene, model, mpc, total_time, delay_time: float = 1.0):
             "wrist_2_joint": q5,
             "wrist_3_joint": q6
         })
-        scene.update_triad("frames/end_effector_frame", position=ee_pose_world[t][:3], orientation_rpy=scene.quaternion_to_euler_numpy(ee_pose_world[t][3:7]))
+        scene.update_triad("frames/end_effector_frame", position=ee_pose_world[t][:3], orientation_rpy=ee_pose_world[t][3:6])
         scene.update_triad("frames/task_frame", position=task_xyz_surface, orientation_rpy=surface.get_rpy(task_xyz_surface[0], task_xyz_surface[1]))
         scene.update_line("lines/ee_trajectory", points=np.array(ee_pose_world[t][:3]).reshape(-1, 3))
         
@@ -182,7 +182,7 @@ if __name__ == "__main__":
         initial_state=robot.initial_state,
         control_input=robot.control,
         dynamics=robot.get_explicit_model()['ode'],
-        forward_kinematics=robot.fk_casadi,
+        forward_kinematics=robot.fk_casadi,  # Uses rotation matrix version
         differential_kinematics=robot.dk_casadi
     )
     

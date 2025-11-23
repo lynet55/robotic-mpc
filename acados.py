@@ -17,7 +17,7 @@ class MPC:
             state: CasADi symbolic state variable [q, q_dot]
             control_input: CasADi symbolic control variable
             dynamics: CasADi expression for state derivative (dx/dt)
-            forward_kinematics: CasADi Function that maps q -> [px, py, pz, qx, qy, qz, qw]
+            forward_kinematics: CasADi Function that maps q -> [px, py, pz, R11, R12, R13, R21, R22, R23, R31, R32, R33]
             differential_kinematics: CasADi Function that maps (q, q_dot) -> [vx, vy, vz, wx, wy, wz]
             surface_position: 3D position of surface origin [x, y, z]
             surface_rpy: Surface orientation as [roll, pitch, yaw] in radians
@@ -68,10 +68,17 @@ class MPC:
         ee_x_world = fk_out[0]
         ee_y_world = fk_out[1]
         ee_z_world = fk_out[2]
-        qx = fk_out[3]
-        qy = fk_out[4]
-        qz = fk_out[5]
-        qw = fk_out[6]
+        # Extract rotation matrix elements [R11, R12, R13, R21, R22, R23, R31, R32, R33]
+        R11 = fk_out[3]
+        R12 = fk_out[4]
+        R13 = fk_out[5]
+        R21 = fk_out[6]
+        R22 = fk_out[7]
+        R23 = fk_out[8]
+        R31 = fk_out[9]
+        R32 = fk_out[10]
+        R33 = fk_out[11]
+        
         dk_out = differential_kinematics(q, q_dot)
         ee_vx_world = dk_out[0]
         ee_vy_world = dk_out[1]
@@ -90,11 +97,8 @@ class MPC:
         # Define parameters: [x_ref, y_ref, z_ref, nx, ny, nz]
         # where (x_ref, y_ref, z_ref) is reference position in surface frame
         # and (nx, ny, nz) is the surface normal vector
-        ee_z_axis = ca.vertcat(
-            2*(qx*qz + qw*qy),
-            2*(qy*qz - qw*qx),
-            1 - 2*(qx*qx + qy*qy)
-        )
+        # Extract z-axis (third column) from rotation matrix
+        ee_z_axis = ca.vertcat(R13, R23, R33)
 
         x_ref = p[0]
         y_ref = p[1]

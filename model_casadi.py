@@ -80,16 +80,33 @@ class SixDofRobot:
         ee_position = ee_transform.translation  # 3D position (CasADi expression)
         ee_rotation = ee_transform.rotation     # 3x3 rotation matrix (CasADi expression)
         
-        # Convert rotation matrix to quaternion (CasADi expression)
-        quat = self._rotation_matrix_to_quaternion_casadi(ee_rotation)
+        # Flatten rotation matrix to vector [R11, R12, R13, R21, R22, R23, R31, R32, R33]
+        ee_rotation_flat = ca.vertcat(
+            ee_rotation[0, 0], ee_rotation[0, 1], ee_rotation[0, 2],
+            ee_rotation[1, 0], ee_rotation[1, 1], ee_rotation[1, 2],
+            ee_rotation[2, 0], ee_rotation[2, 1], ee_rotation[2, 2]
+        )
         
-        # Concatenate position and quaternion [x, y, z, qx, qy, qz, qw]
-        ee_pose = ca.vertcat(ee_position, quat)
+        # Concatenate position and rotation matrix [x, y, z, R11, R12, ..., R33]
+        ee_pose_rotmat = ca.vertcat(ee_position, ee_rotation_flat)
         
+        # Create FK function with rotation matrix output
         self.fk_casadi = ca.Function('forward_kinematics',
                                       [q_sym],
-                                      [ee_pose],
+                                      [ee_pose_rotmat],
                                       ['q'], ['pose'])
+        
+        # Convert rotation matrix to euler angles (ZYX convention)
+        euler_angles = self._rotation_matrix_to_euler_casadi(ee_rotation)
+        
+        # Concatenate position and euler angles [x, y, z, roll, pitch, yaw]
+        ee_pose_euler = ca.vertcat(ee_position, euler_angles)
+        
+        # Create FK function with euler angles output
+        self.fk_casadi_euler = ca.Function('forward_kinematics_euler',
+                                            [q_sym],
+                                            [ee_pose_euler],
+                                            ['q'], ['pose'])
         
         # Differential kinematics using CasADi Pinocchio
         J = cpin.computeFrameJacobian(self._cmodel, self._cdata, q_sym,
@@ -126,6 +143,27 @@ class SixDofRobot:
         z = (R[1, 0] - R[0, 1]) * factor
         
         return ca.vertcat(x, y, z, w)
+    
+    def _rotation_matrix_to_euler_casadi(self, R):
+        """
+        Convert 3x3 rotation matrix to euler angles (ZYX convention) using CasADi
+        
+        Args:
+            R: 3x3 CasADi rotation matrix
+        
+        Returns:
+            euler angles [roll, pitch, yaw] as CasADi expression
+        """
+        # ZYX Euler angles (roll-pitch-yaw)
+        # pitch = atan2(-R[2,0], sqrt(R[0,0]^2 + R[1,0]^2))
+        # roll = atan2(R[2,1], R[2,2])
+        # yaw = atan2(R[1,0], R[0,0])
+        
+        pitch = ca.atan2(-R[2, 0], ca.sqrt(R[0, 0]**2 + R[1, 0]**2))
+        roll = ca.atan2(R[2, 1], R[2, 2])
+        yaw = ca.atan2(R[1, 0], R[0, 0])
+        
+        return ca.vertcat(roll, pitch, yaw)
     
     def _generate_dynamics_model(self):
         """
@@ -198,15 +236,15 @@ class SixDofRobot:
     
     def forward_kinematics(self, q):
         """
-        Compute forward kinematics for given joint positions
+        Compute forward kinematics for given joint positions (Euler angles version)
         
         Args:
             q: Joint positions (CasADi symbolic or numeric)
         
         Returns:
-            End-effector pose [position(3), quaternion(4)] as CasADi expression
+            End-effector pose [position(3), euler_angles(3)] as CasADi expression
         """
-        return self.fk_casadi(q)
+        return self.fk_casadi_euler(q)
     
     def differential_kinematics(self, q, q_dot):
         """
@@ -226,10 +264,10 @@ class SixDofRobot:
         q = self.state[:self.n_dof]
         q_dot = self.state[self.n_dof:]
         
-        # Outputs: [end_effector_pose(7), end_effector_velocity(6)]
-        ee_pose = self.fk_casadi(q)
+        # Outputs: [end_effector_pose(12 with rotmat or 6 with euler), end_effector_velocity(6)]
+        ee_pose_rotmat = self.fk_casadi(q)  # position + rotation matrix
         ee_vel = self.dk_casadi(q, q_dot)
-        output = ca.vertcat(ee_pose, ee_vel)
+        output = ca.vertcat(ee_pose_rotmat, ee_vel)
         
         return {
             'state': self.state,
