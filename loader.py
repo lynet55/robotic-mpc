@@ -1,7 +1,6 @@
 import pinocchio as pin
 from pathlib import Path
 from typing import Optional, List
-from pinocchio.visualize import MeshcatVisualizer
 
 class UrdfLoader:
 
@@ -10,11 +9,12 @@ class UrdfLoader:
     
     def __init__(self, robot_name: str) -> None:
         self._urdf_file_path: Path = self.URDF_DIR / f"{robot_name}.urdf"
-        self._mesh_dir: List[str] = [str(self.ROOT)]
+        self._mesh_dir: List[str] = [str(self._urdf_file_path.parent)]
         self._model: Optional[pin.Model] = None
         self._vmodel = None
         self._cmodel = None
         self._data: Optional[pin.Data] = None
+        self._fee = None
 
         try:
             self._model, self._vmodel, self._cmodel = pin.buildModelsFromUrdf(
@@ -24,6 +24,7 @@ class UrdfLoader:
             print(f"URDF successfully loaded: {self._urdf_file_path}")
             print(f"nq = {self._model.nq}, ngeoms(vis) = {self._vmodel.ngeoms}, ngeoms(col) = {self._cmodel.ngeoms}")
             self._data = self._model.createData()
+            self._fee = self._model.getFrameId('ee_fixed_joint')
 
         except FileNotFoundError as e:
             print(f"File not found: {e.filename}")
@@ -53,3 +54,7 @@ class UrdfLoader:
     @property
     def visual_model(self):
         return self._vmodel
+
+    @property
+    def fee(self):
+        return self._fee  
