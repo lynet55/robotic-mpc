@@ -52,9 +52,6 @@ OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_0_hess.c
 OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_fun.c
 OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_fun_jac_ut_xt.c
 OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_hess.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_fun.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_fun_jac_ut_xt.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_hess.c
 
 OCP_SRC+= acados_solver_six_dof_robot_model.c
 

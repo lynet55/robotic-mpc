@@ -160,7 +160,7 @@ void six_dof_robot_model_acados_create_set_plan(ocp_nlp_plan_t* nlp_solver_plan,
     for (int i = 1; i < N; i++)
         nlp_solver_plan->nlp_cost[i] = NONLINEAR_LS;
 
-    nlp_solver_plan->nlp_cost[N] = NONLINEAR_LS;
+    nlp_solver_plan->nlp_cost[N] = LINEAR_LS;
 
     for (int i = 0; i < N; i++)
     {
@@ -379,9 +379,6 @@ void six_dof_robot_model_acados_create_setup_functions(six_dof_robot_model_solve
             MAP_CASADI_FNC(cost_y_fun_jac_ut_xt[i], six_dof_robot_model_cost_y_fun_jac_ut_xt);
         }
     } // N > 0
-    // nonlinear least square function
-    MAP_CASADI_FNC(cost_y_e_fun, six_dof_robot_model_cost_y_e_fun);
-    MAP_CASADI_FNC(cost_y_e_fun_jac_ut_xt, six_dof_robot_model_cost_y_e_fun_jac_ut_xt);
 
 #undef MAP_CASADI_FNC
 }
@@ -393,14 +390,7 @@ void six_dof_robot_model_acados_create_setup_functions(six_dof_robot_model_solve
 void six_dof_robot_model_acados_create_set_default_parameters(six_dof_robot_model_solver_capsule* capsule)
 {
 
-    const int N = capsule->nlp_solver_plan->N;
-    // initialize parameters to nominal value
-    double* p = calloc(NP, sizeof(double));
-
-    for (int i = 0; i <= N; i++) {
-        six_dof_robot_model_acados_update_params(capsule, i, p, NP);
-    }
-    free(p);
+    // no parameters defined
 
 
     // no global parameters defined
@@ -489,13 +479,6 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     W_0[0+(NY0) * 0] = 100;
     W_0[1+(NY0) * 1] = 100;
     W_0[2+(NY0) * 2] = 100;
-    W_0[3+(NY0) * 3] = 100;
-    W_0[4+(NY0) * 4] = 0.01;
-    W_0[5+(NY0) * 5] = 0.01;
-    W_0[6+(NY0) * 6] = 0.01;
-    W_0[7+(NY0) * 7] = 0.01;
-    W_0[8+(NY0) * 8] = 0.01;
-    W_0[9+(NY0) * 9] = 0.01;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* yref = calloc(NY, sizeof(double));
@@ -511,31 +494,12 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     W[0+(NY) * 0] = 100;
     W[1+(NY) * 1] = 100;
     W[2+(NY) * 2] = 100;
-    W[3+(NY) * 3] = 100;
-    W[4+(NY) * 4] = 0.01;
-    W[5+(NY) * 5] = 0.01;
-    W[6+(NY) * 6] = 0.01;
-    W[7+(NY) * 7] = 0.01;
-    W[8+(NY) * 8] = 0.01;
-    W[9+(NY) * 9] = 0.01;
 
     for (int i = 1; i < N; i++)
     {
         ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "W", W);
     }
     free(W);
-    double* yref_e = calloc(NYN, sizeof(double));
-    // change only the non-zero elements:
-    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
-    free(yref_e);
-
-    double* W_e = calloc(NYN*NYN, sizeof(double));
-    // change only the non-zero elements:
-    W_e[0+(NYN) * 0] = 100;
-    W_e[1+(NYN) * 1] = 100;
-    W_e[2+(NYN) * 2] = 100;
-    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
-    free(W_e);
     ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, 0, "nls_y_fun", &capsule->cost_y_0_fun);
     ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, 0, "nls_y_fun_jac", &capsule->cost_y_0_fun_jac_ut_xt);
     for (int i = 1; i < N; i++)
@@ -543,8 +507,6 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
         ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "nls_y_fun", &capsule->cost_y_fun[i-1]);
         ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, i, "nls_y_fun_jac", &capsule->cost_y_fun_jac_ut_xt[i-1]);
     }
-    ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, N, "nls_y_fun", &capsule->cost_y_e_fun);
-    ocp_nlp_cost_model_set_external_param_fun(nlp_config, nlp_dims, nlp_in, N, "nls_y_fun_jac", &capsule->cost_y_e_fun_jac_ut_xt);
 
 
 
@@ -977,7 +939,7 @@ int six_dof_robot_model_acados_update_params(six_dof_robot_model_solver_capsule*
 {
     int solver_status = 0;
 
-    int casadi_np = 6;
+    int casadi_np = 0;
     if (casadi_np != np) {
         printf("acados_update_params: trying to set %i parameters for external functions."
             " External function has %i parameters. Exiting.\n", np, casadi_np);
@@ -1065,8 +1027,6 @@ int six_dof_robot_model_acados_free(six_dof_robot_model_solver_capsule* capsule)
     }
     free(capsule->cost_y_fun);
     free(capsule->cost_y_fun_jac_ut_xt);
-    external_function_external_param_casadi_free(&capsule->cost_y_e_fun);
-    external_function_external_param_casadi_free(&capsule->cost_y_e_fun_jac_ut_xt);
 
     // constraints
 

@@ -169,13 +169,6 @@ int six_dof_robot_model_acados_sim_create(six_dof_robot_model_sim_solver_capsule
     capsule->acados_sim_solver = six_dof_robot_model_sim_solver;
 
 
-    /* initialize parameter values */
-    double* p = calloc(np, sizeof(double));
-    
-
-    six_dof_robot_model_acados_sim_update_params(capsule, p, np);
-    free(p);
-
 
     /* initialize input */
     // x

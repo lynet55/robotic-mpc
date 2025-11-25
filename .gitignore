@@ -4,3 +4,4 @@ __pycache__
 c_generated_code
 run.sh
 acados_ocp.json
+DS_Store

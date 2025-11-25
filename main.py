@@ -11,7 +11,7 @@ from model import Robot as six_dof_model
 from model_casadi import SixDofRobot as prediction_model
 from surface import Surface
 
-def run_sim(scene, model, mpc, trajectory, delay_time):
+def run_sim(scene, model, mpc, delay_time):
     """
     Run the closed-loop simulation.
 
@@ -53,13 +53,13 @@ def run_sim(scene, model, mpc, trajectory, delay_time):
         scale=0.2,
         line_width=2.0
     )
-    scene.add_triad(
-        position=task_origin_world,
-        orientation_rpy=np.array([0.0, 0.0, 0.0]),
-        path="frames/task_frame",
-        scale=0.2,
-        line_width=2.0
-    )
+    # scene.add_triad(
+    #     position=task_origin_world,
+    #     orientation_rpy=np.array([0.0, 0.0, 0.0]),
+    #     path="frames/task_frame",
+    #     scale=0.2,
+    #     line_width=2.0
+    # )
     # task_xyz_surface, task_xyz_world = surface.get_point_on_surface(surface.limits[0][0] + 5.0 , surface.limits[1][0] + 5.0)
     task_xyz_surface, task_xyz_world = surface.get_random_point_on_surface()
     task_rpy = surface.get_rpy(task_xyz_surface[0], task_xyz_surface[1])
@@ -71,31 +71,33 @@ def run_sim(scene, model, mpc, trajectory, delay_time):
         if t % 100 == 0:
             task_xyz_surface, task_xyz_world = surface.get_random_point_on_surface()
 
-        task_normal_surface = surface.get_normal_vector(task_xyz_surface[0], task_xyz_surface[1])
+        # task_normal_surface = surface.get_normal_vector(task_xyz_surface[0], task_xyz_surface[1])
 
         #MPC input and refferences
-        current_state = model.state(t)
-        tracking_variables = np.concatenate((
-            task_xyz_surface, #constraints for positions
-            surface.get_normal_vector(task_xyz_surface[0], task_xyz_surface[1]), #constraints for normal vector
-        ))
-        
+        current_state = model.state(t)        
         mpc.solver.set(0, 'lbx', current_state)
-        mpc.solver.set(0, 'ubx', (current_state))
-        optimal_control = mpc.optimal_control(tracking_variables)
+        mpc.solver.set(0, 'ubx', current_state)
+        status = mpc.solver.solve()
+        if status != 0:
+            print(f"MPC solver failed with status {status} at t={t}")
+            optimal_control = np.zeros(6)  # Fallback to zero control
+        else:
+            optimal_control = mpc.solver.get(0, "u")
 
-        # Apply forward and differential kinematics to each predicted state
-        predicted_ee_positions = []
-        predicted_ee_velocities = []
-        for k in range(mpc.ocp.dims.N + 1):
-            predicted_state = mpc.solver.get(k, "x")
-            ee_pos = model.forward_kinematics(predicted_state[:6])
-            ee_vel = model.diff_kinematic(predicted_state[:6], predicted_state[6:])
-            predicted_ee_positions.append(ee_pos[:3])  # Only position (x, y, z)
-            predicted_ee_velocities.append(ee_vel)
+        print(optimal_control)
+
+        # FOR VISUALIZATION, Apply forward and differential kinematics to each predicted state
+        # predicted_ee_positions = []
+        # predicted_ee_velocities = []
+        # for k in range(mpc.ocp.dims.N + 1):
+        #     predicted_state = mpc.solver.get(k, "x")
+        #     ee_pos = model.forward_kinematics(predicted_state[:6])
+        #     ee_vel = model.diff_kinematic(predicted_state[:6], predicted_state[6:])
+        #     predicted_ee_positions.append(ee_pos[:3])  # Only position (x, y, z)
+        #     predicted_ee_velocities.append(ee_vel)
         
-        predicted_ee_positions = np.array(predicted_ee_positions)
-        predicted_ee_velocities = np.array(predicted_ee_velocities)
+        # predicted_ee_positions = np.array(predicted_ee_positions)
+        # predicted_ee_velocities = np.array(predicted_ee_velocities)
       
         #State Update and State Feedback
         model.update(model.state(t), optimal_control, t)
@@ -117,7 +119,7 @@ def run_sim(scene, model, mpc, trajectory, delay_time):
         scene.update_triad("frames/end_effector_frame", position=model.ee_position(t+1), orientation_rpy=model.ee_orientation(t+1))
         scene.update_triad("frames/task_frame", position=task_xyz_world, orientation_rpy=task_rpy)
         # scene.update_line("lines/ee_trajectory", points=ee_trajectory_points)
-        scene.update_line("lines/mpc_prediction", points=predicted_ee_positions)
+        # scene.update_line("lines/mpc_prediction", points=predicted_ee_positions)
         time.sleep(delay_time)
 
 if __name__ == "__main__":
@@ -126,12 +128,12 @@ if __name__ == "__main__":
     surface_origin = np.array([0.0, 0.0, 0.0])
     surface_orientation_rpy = np.array([0.0, 0.0, 0.0])
 
-    u0 = np.zeros([6])
+    u0 = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1], dtype=np.float64)
     z0 = np.zeros([12])
     qdot0 = np.array([2,2,0,0,0,5], dtype=np.float64)
 
     sample_time = 0.1
-    total_time = 1000.0
+    total_time = 1000090000.0   
     dt = sample_time
     N = int(total_time / sample_time)
 
@@ -142,9 +144,6 @@ if __name__ == "__main__":
         orientation_rpy=surface_orientation_rpy,
         limits=surface_limits
     )
-
-    task_origin_surface, task_origin_world = surface.get_point_on_surface(surface.limits[0][0] + 5.0 , surface.limits[1][0] + 5.0)
-    surface_trajectory = surface.generate_simple_trajectory(task_origin_surface, time_increment=0.10, x_margin_surface=5, num_points=400, y_margin_surface=5, x_step=10, y_step=5)
 
     robot = six_dof_model(
         urdf_loader=robot_loader,
@@ -188,6 +187,5 @@ if __name__ == "__main__":
         scene,
         robot,
         mpc,
-        surface_trajectory,
-        delay_time = 0.5,
+        delay_time = 0.0,
     )

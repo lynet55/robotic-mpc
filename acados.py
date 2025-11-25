@@ -49,14 +49,13 @@ class MPC:
         self.nu = control_input.shape[0]
 
         x_dot = ca.SX.sym('x_dot', self.nx)
-        p = ca.SX.sym('p', 6)
         
         self.ocp.model.x = state  # State is [q, q_dot] - joint positions and velocities
         self.ocp.model.xdot = x_dot
         self.ocp.model.u = control_input
         self.ocp.model.f_expl_expr = dynamics
         self.ocp.model.f_impl_expr = x_dot - dynamics
-        self.ocp.model.p = p
+        # self.ocp.model.p = p
 
         # Compute end-effector quantities from state
         n_dof = self.nx // 2
@@ -92,59 +91,48 @@ class MPC:
         surface_rpy_world = ca.vertcat(self.surface_rpy_world[0], self.surface_rpy_world[1], self.surface_rpy_world[2])
 
         # Transform EE position to surface frame
-        ee_pos_surf = self._ee_to_surface_transform_2(ee_pos_world)
-        
-        # Define parameters: [x_ref, y_ref, z_ref, nx, ny, nz]
-        # where (x_ref, y_ref, z_ref) is reference position in surface frame
-        # and (nx, ny, nz) is the surface normal vector
-        # Extract z-axis (third column) from rotation matrix
-        ee_z_axis = ca.vertcat(R13, R23, R33)
+        task_position_surface = self._ee_to_surface_transform_2(ee_pos_world) #TODO
+        ee_z_axis = ca.vertcat(R13, R23, R33) #should maybe be of the task frame instead
+        ee_x_axis = ca.vertcat(R11, R21, R31) #should maybe be of the task frame instead
 
-        x_ref = p[0]
-        y_ref = p[1]
-        z_ref = p[2]
-        normal_ref = ca.vertcat(p[3], p[4], p[5])
-        normal_alignment = ca.dot(ee_z_axis, normal_ref)
+        #WAY OF KNOWING Z pos and e_xyz
+        surface_normal = self.surface.get_normal_vector_casadi(task_position_surface[0], task_position_surface[1]) #TODO
+        normal_alignment = ca.dot(ee_z_axis, surface_normal)
+        # x_axis_alignment = ca.dot(ee_x_axis, x_axis_normal) #TODO check if this is correct
+        # xy_axis_alignment = ca.dot(ee_y_axis, y_axis_normal) #TODO check if this is correct
 
-        # Define output function for cost
-        v_ref = ca.DM([0.2, 0.0, 0.0])      # constant desired EE linear velocity
+        # Define output function for cost function
         u_ref = ca.DM([0, 0, 0, 0, 0, 0])   # constant desired control (usually zeros)
+        z_ref = 0
+        v_y_ref = 5 # refference speed y axis
 
         h = ca.vertcat(
-            ee_pos_surf[0] - x_ref,
-            ee_pos_surf[1] - y_ref,
-            ee_pos_surf[2] - z_ref,
-            # ee_vx_world - v_ref[0],
-            # ee_vy_world - v_ref[1],
-            # ee_vz_world - v_ref[2],
-            1.0 - normal_alignment,
-            control_input - u_ref
+            task_position_surface[0],
+            ee_vy_world - v_y_ref,
+            1.0 - normal_alignment # z - axis aligment
+            # 1.0 - x_axis_alignment
+            # 1.0 - y_axis_alignment
+            # control_input - u_ref # possible control penalty
         )
         
-        
         # Cost function weights
-        w_task_xy_surface = 100.0 
         w_task_z_surface = 100.0     
-        w_task_velocity_xyz_surface = 50.0
-        w_task_normal_surface = 100.0  # High weight for orientation alignment
+        w_task_velocity_y = 100.0
+        w_task_z_alignment = 100.0  # High weight for orientation alignment
         w_control_input = 0.01
+        q_dot_max = 10.0  # Maximum joint velocity command
         
         W = np.diag([
-            w_task_xy_surface,           # x position
-            w_task_xy_surface,           # y position
             w_task_z_surface,            # z position (offset)
-            # w_task_velocity_xyz_surface, # vx
-            # w_task_velocity_xyz_surface, # vy
-            # w_task_velocity_xyz_surface, # vz
-            w_task_normal_surface,       # alignment error
-            w_control_input,             # u[0]
-            w_control_input,             # u[1]
-            w_control_input,             # u[2]
-            w_control_input,             # u[3]
-            w_control_input,             # u[4]
-            w_control_input              # u[5]
+            w_task_velocity_y,           # vy
+            w_task_z_alignment           # z axis alignment
+            # w_control_input,             # u[0]
+            # w_control_input,             # u[1]
+            # w_control_input,             # u[2]
+            # w_control_input,             # u[3]
+            # w_control_input,             # u[4]
+            # w_control_input              # u[5]
         ])
-
 
         self.ocp.cost.cost_type = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr = h
@@ -155,36 +143,45 @@ class MPC:
         # self.ocp.model.cost_expr_ext_cost = 0.5 * h.T @ W @ h
         
         # Set up parameters
-        self.ocp.dims.np = 6
-        self.ocp.parameter_values = np.zeros(6)
+        # self.ocp.dims.np = 6
+        # self.ocp.parameter_values = np.zeros(6)
         
         # Terminal cost (optional - higher weights on position)
-        h_e = ca.vertcat(
-            ee_pos_surf[0] - x_ref,
-            ee_pos_surf[1] - y_ref,
-            ee_pos_surf[2] - z_ref,
-            1.0 - normal_alignment
-        )
+        # h_e = ca.vertcat(
+        #     task_position_surface[0] - x_ref,
+        #     task_position_surface[1] - y_ref,
+        #     ee_pos_surf[2] - z_ref,
+        #     ee_vx_world - 5,
+        #     1.0 - normal_alignment
+        # )
+
+        # h_e = ca.vertcat(
+        #     ee_pos_surf[0] - x_ref,
+        #     ee_pos_surf[1] - y_ref,
+        #     ee_pos_surf[2] - z_ref,
+        #     ee_vx_world - 5,
+        #     1.0 - normal_alignment
+        # )
         
-        w_terminal_task_xy_surface = 100
-        w_terminal_task_z_surface = 100
-        w_terminal_normal_alignment = 0.0
-        w_terminal_control_input = 0.0
+        # w_terminal_task_xy_surface = 100
+        # w_terminal_task_z_surface = 100
+        # w_terminal_normal_alignment = 0.0
+        # w_terminal_control_input = 0.0
 
-        W_e = np.diag([
-            w_terminal_task_xy_surface,           # x position
-            w_terminal_task_xy_surface,           # y position
-            w_terminal_task_z_surface,            # z position (offset)
-            w_terminal_control_input,             # u[0]
-        ])  # Higher terminal weights
+        # W_e = np.diag([
+        #     w_terminal_task_xy_surface,           # x position
+        #     w_terminal_task_xy_surface,           # y position
+        #     w_terminal_task_z_surface,            # z position (offset)
+        #     w_terminal_control_input,             # u[0]
+        # ])  # Higher terminal weights
 
-        self.ocp.cost.cost_type_e = 'NONLINEAR_LS'
-        self.ocp.model.cost_y_expr_e = h_e
-        self.ocp.cost.W_e = W_e
-        self.ocp.cost.yref_e = np.zeros(W_e.shape[0])
+        # self.ocp.cost.cost_type_e = 'NONLINEAR_LS'
+        # self.ocp.model.cost_y_expr_e = h_e
+        # self.ocp.cost.W_e = W_e
+        # self.ocp.cost.yref_e = np.zeros(W_e.shape[0])
 
         # Control input bounds (joint velocity commands)
-        q_dot_max = 10.0  # Maximum joint velocity command
+
 
         # Control input bounds (joint velocity commands)
         self.ocp.constraints.lbu = np.array([-q_dot_max] * 6)
@@ -234,13 +231,13 @@ class MPC:
         return transformed_point
 
     
-    def optimal_control(self, tracking_variables):
-        for k in range(self.ocp.dims.N + 1):
-            self.solver.set(k, "p", tracking_variables)
-        status = self.solver.solve()
-        if status != 0:
-            print(f"MPC warning: solver status {status} at t={t}; using fallback control")
-            optimal_control = np.zeros(self.nx)
-        else:
-            optimal_control = self.solver.get(0, "u")
-        return optimal_control
+    # def optimal_control(self, tracking_variables):
+    #     for k in range(self.ocp.dims.N + 1):
+    #         self.solver.set(k, "p", tracking_variables)
+    #     status = self.solver.solve()
+    #     if status != 0:
+    #         print(f"MPC warning: solver status {status} at t={t}; using fallback control")
+    #         optimal_control = np.zeros(self.nx)
+    #     else:
+    #         optimal_control = self.solver.get(0, "u")
+    #     return optimal_control

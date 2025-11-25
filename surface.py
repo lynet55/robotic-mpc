@@ -10,13 +10,13 @@ class Surface:
 
         self.x = ca.SX.sym("x")
         self.y = ca.SX.sym("y")
-        # a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
-        # self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
+        a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
+        self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
 
-        wave_amplitude = 0.1
-        wave_freq_x = 20.0
-        wave_freq_y = 20.0
-        self.quadratic_surface = wave_amplitude * (ca.sin(wave_freq_x * self.x) + ca.sin(wave_freq_y * self.y))
+        # wave_amplitude = 0.1
+        # wave_freq_x = 20.0
+        # wave_freq_y = 20.0
+        # self.quadratic_surface = wave_amplitude * (ca.sin(wave_freq_x * self.x) + ca.sin(wave_freq_y * self.y))
 
 
     def get_surface_height(self, x, y):
@@ -271,12 +271,21 @@ class Surface:
         return np.array([float(nx_val), float(ny_val), float(nz_val)])
     
     def get_normal_vector_casadi(self, x_surface, y_surface):
-        # Assume self.quadratic_surface is expressed in terms of x_sym, y_sym
-        # Compute partial derivatives symbolically
+        """
+        Compute the surface normal vector at a given point as a CasADi expression.
+        
+        Args:
+            x_surface: CasADi expression for x coordinate
+            y_surface: CasADi expression for y coordinate
+            
+        Returns:
+            CasADi expression for normalized normal vector [nx, ny, nz]
+        """
+        # Compute partial derivatives symbolically with respect to self.x and self.y
         dz_dx = ca.jacobian(self.quadratic_surface, self.x)
         dz_dy = ca.jacobian(self.quadratic_surface, self.y)
         
-        # Normal vector components
+        # Normal vector components (before substitution)
         nx = -dz_dx
         ny = -dz_dy
         nz = 1.0
@@ -287,4 +296,14 @@ class Surface:
         ny_norm = ny / norm
         nz_norm = nz / norm
         
-        return ca.vertcat(nx_norm, ny_norm, nx_norm)
+        # Substitute the input CasADi expressions for the symbolic variables
+        nx_eval = ca.substitute(nx_norm, self.x, x_surface)
+        nx_eval = ca.substitute(nx_eval, self.y, y_surface)
+        
+        ny_eval = ca.substitute(ny_norm, self.x, x_surface)
+        ny_eval = ca.substitute(ny_eval, self.y, y_surface)
+        
+        nz_eval = ca.substitute(nz_norm, self.x, x_surface)
+        nz_eval = ca.substitute(nz_eval, self.y, y_surface)
+        
+        return ca.vertcat(nx_eval, ny_eval, nz_eval)
