@@ -12,78 +12,83 @@ FloatArray = NDArray[np.float64]
 # ur5 6 d.o.f industrial manipulator, using different simulation approaches.
 class Robot:
 
-    def __init__(self, z0, u0, Ts, N, wcv, urdf_loader: UrdfLoader, integration_method="RK4") -> None:
+    def __init__(self, z0, u0, T, Ts, wcv, urdf_loader: UrdfLoader, integration_method="RK4") -> None:
         self.urdf_loader = urdf_loader
         self._model = urdf_loader.model
         self._data = urdf_loader.data
         self._fee = urdf_loader.fee
 
         self._Ts = Ts
+        self._T = T
         self._z0 = z0
         self._u0 = u0
+        self._N = int(T/Ts)
         self.wcv = np.diag(wcv)
-        self.z = np.zeros((12,N), dtype=np.float64)
-        self.u = np.zeros((6,N), dtype=np.float64)
-        self._ee_pose_log = np.zeros((6,N), dtype=np.float64)
-        self._ee_velocity_log = np.zeros((6,N), dtype=np.float64)
+
+        self.z = np.zeros((12,self._N), dtype=np.float64)
+        self.u = np.zeros((6,self._N), dtype=np.float64)
+        self._ee_pose_log = np.zeros((6,self._N), dtype=np.float64)
+        self._ee_velocity_log = np.zeros((6,self._N), dtype=np.float64)
+
         self._current_index = 0
         self.z[:, 0] = self._z0
         self.u[:, 0] = self._u0
         self._ee_pose_log[:, 0] = self.forward_kinematics(self._z0[:6])
         self._ee_velocity_log[:, 0] = self.diff_kinematic(self._z0[:6], self._z0[6:])
         
-
-        #self._N = int(self._T/self._Ts)
-        # self._Nu = int(self._Tu/self._Ts)
-
         self._integration_method_name = integration_method
-        if integration_method == "RK2":
+        if integration_method == "Euler":
+            self._integration_method = self._euler_update
+        elif integration_method == "RK2":
             self._integration_method = self._rk2_update
+        elif integration_method == "RK3":
+            self._integration_method = self._rk3_update
         elif integration_method == "RK4":
             self._integration_method = self._rk4_update
-        elif integration_method == "Euler":
-            self._integration_method = self._euler_update
         else:
             raise ValueError(f"Unknown integration method: {integration_method}")
    
-    # @property
-    # def Ts(self):
-    #     return self._Ts
+    @property
+    def Ts(self):
+        return self._Ts
     
-    # @Ts.setter
-    # def Ts(self, new_Ts):
-    #     if new_Ts <= 0:
-    #         raise ValueError("The sampling time must be positive")
-    #     if not isinstance(new_Ts, float):
-    #         raise TypeError(f"Expected type float, got {type(new_Ts).__name__}.")
-    #     self._Ts = new_Ts
-    #     self._update_N_and_Nu()
+    @Ts.setter
+    def Ts(self, new_Ts):
+        if new_Ts <= 0:
+            raise ValueError("The sampling time must be positive")
+        if not isinstance(new_Ts, float):
+            raise TypeError(f"Expected type float, got {type(new_Ts).__name__}.")
+        self._Ts = new_Ts
+        self._update_N_and_Nu()
 
-    # @property
-    # def T(self):
-    #     return self._T
+    @property
+    def T(self):
+        return self._T
+    @property
+    def N(self):
+        return self._N
     
-    # @T.setter
-    # def T(self, new_T):
-    #     if new_T <= 0:
-    #         raise ValueError("The total simulation time must be positive")
-    #     if not isinstance(new_T, float):
-    #         raise TypeError(f"Expected type float, got {type(new_T).__name__}.")
-    #     self._T = new_T
-    #     self._update_N_and_Nu()
+    @T.setter
+    def T(self, new_T):
+        if new_T <= 0:
+            raise ValueError("The total simulation time must be positive")
+        if not isinstance(new_T, float):
+            raise TypeError(f"Expected type float, got {type(new_T).__name__}.")
+        self._T = new_T
+        self._update_N_and_Nu()
 
-    # @property
-    # def Tu(self):
-    #     return self._Tu
+    @property
+    def Tu(self):
+        return self._Tu
     
-    # @Tu.setter
-    # def Tu(self, new_Tu):
-    #     if new_Tu <= 0:
-    #         raise ValueError("The input step time must be positive")
-    #     if not isinstance(new_Tu, float):
-    #         raise TypeError(f"Expected type float, got {type(new_Tu).__name__}.")
-    #     self._Tu = new_Tu
-    #     self._update_N_and_Nu()
+    @Tu.setter
+    def Tu(self, new_Tu):
+        if new_Tu <= 0:
+            raise ValueError("The input step time must be positive")
+        if not isinstance(new_Tu, float):
+            raise TypeError(f"Expected type float, got {type(new_Tu).__name__}.")
+        self._Tu = new_Tu
+        self._update_N_and_Nu()
 
 
     @property
@@ -135,28 +140,51 @@ class Robot:
         z_dot[6:] = - self.wcv @ z[6:] + self.wcv @ u        # Joint speeds state equations
         return z_dot
 
+    def _euler_update(self, z_k, u_k, dt):
+        """Forward Euler integration (RK1)."""
+        k1 = self._continuos_time_state(z_k, u_k, self.wcv)
+        return z_k + dt * k1
+
+    def _rk2_update(self, z_k, u_k, dt):
+        """Runge-Kutta 2nd order (midpoint method)."""
+        k1 = self._continuos_time_state(z_k, u_k, self.wcv)
+        k2 = self._continuos_time_state(z_k + 0.5 * dt * k1, u_k, self.wcv)
+        return z_k + dt * k2
+
+    def _rk3_update(self, z_k, u_k, dt):
+        """Runge-Kutta 3rd order."""
+        k1 = self._continuos_time_state(z_k, u_k, self.wcv)
+        k2 = self._continuos_time_state(z_k + 0.5 * dt * k1, u_k, self.wcv)
+        k3 = self._continuos_time_state(z_k - dt * k1 + 2 * dt * k2, u_k, self.wcv)
+        return z_k + (dt / 6) * (k1 + 4 * k2 + k3)
+
     def _rk4_update(self, z_k, u_k, dt):
-        """State dict must contain 'z', 'u', and 'Wcv'."""
+        """Runge-Kutta 4th order."""
         k1 = self._continuos_time_state(z_k, u_k, self.wcv)
         k2 = self._continuos_time_state(z_k + 0.5 * dt * k1, u_k, self.wcv)
         k3 = self._continuos_time_state(z_k + 0.5 * dt * k2, u_k, self.wcv)
         k4 = self._continuos_time_state(z_k + dt * k3, u_k, self.wcv)
         return z_k + (dt / 6) * k1 + (dt / 3) * k2 + (dt / 3) * k3 + (dt / 6) * k4
 
-    def euler_simulation(self, wcv):
+    def update(self, z_k, u_k, t):
+        next_state = self._integration_method(z_k, u_k, self._Ts)
+        self.z[:, t + 1] = next_state
+        self.u[:, t + 1] = u_k
+        self._ee_pose_log[:, t + 1] = self.forward_kinematics(next_state[:6])
+        self._ee_velocity_log[:, t + 1] = self.diff_kinematic(next_state[:6], next_state[6:])
+        return next_state
+    
+    def euler_simulation(self):
         start = time.perf_counter()
-        Wcv = np.diag(wcv)
-
         z = np.zeros((12,self._N), dtype=np.float64)
         u = np.zeros((6,self._N), dtype=np.float64)
 
-        u[:,0] = self._u_step
+        u[:,0] = self._u0
         z[:,0] = self._z0
 
         for k in range (0,self._N-1):
-            k1 = self._continuos_time_state(z[:,k],u[:,k], Wcv) #z_dot, output = ...
-            z[:,k+1] = z[:,k] + self._Ts*k1
-
+            # k1 = self._continuos_time_state(z[:,k],u[:,k], Wcv) #z_dot, output = ...
+            z[:,k+1] = self._euler_update(z[:,k], u[:,k], self._Ts)
             u[:, k+1] = u[:, k] if (k + 1) < self._Nu else np.zeros((6,), dtype=np.float64)
 
         end = time.perf_counter()
@@ -165,21 +193,18 @@ class Robot:
         return z, u
         
 
-    def rk2_mp_simulation(self, wcv):
+    def rk2_mp_simulation(self):
         start = time.perf_counter()
-        Wcv = np.diag(wcv)
-
         z = np.zeros((12,self._N), dtype=np.float64)
         u = np.zeros((6,self._N), dtype=np.float64)
 
-        u[:,0] = self._u_step
+        u[:,0] = self._u0
         z[:,0] = self._z0
 
         for k in range (0,self._N-1):
-            k1 = self._continuos_time_state(z[:,k],u[:,k], Wcv)
-            k2 = self._continuos_time_state(z[:,k] + 0.5*self._Ts*k1,u[:,k], Wcv)
-            z[:,k+1] = z[:,k] + self._Ts*k2
-
+            # k1 = self._continuos_time_state(z[:,k],u[:,k], Wcv)
+            # k2 = self._continuos_time_state(z[:,k] + 0.5*self._Ts*k1,u[:,k], Wcv)
+            z[:,k+1] = self._rk2_update(z[:,k], u[:,k], self._Ts)
             u[:, k+1] = u[:, k] if (k + 1) < self._Nu else np.zeros((6,), dtype=np.float64)
         
         end = time.perf_counter()
@@ -187,20 +212,17 @@ class Robot:
         
         return z, u
 
-    def rk4_simulation(self, wcv):
+    def rk4_simulation(self):
         start = time.perf_counter()
-        Wcv = np.diag(wcv)
 
         z = np.zeros((12,self._N), dtype=np.float64)
         u = np.zeros((6,self._N), dtype=np.float64)
 
-        u[:,0] = self._u_step
+        u[:,0] = self._u0
         z[:,0] = self._z0
 
         for k in range (0,self._N-1):
-            state = {"z": z[:,k], "u": u[:,k], "Wcv": Wcv}
-            z[:,k+1] = self._rk4_update(state)
-
+            z[:,k+1] = self._rk4_update(z[:,k], u[:,k], self._Ts)
             u[:, k+1] = u[:, k] if (k + 1) < self._Nu else np.zeros((6,), dtype=np.float64)
         
         end = time.perf_counter()
@@ -209,17 +231,18 @@ class Robot:
         return z, u
     
 
-    def lagrange_formula(self, wcv): 
+    def lagrange_formula(self, Tu): 
         start = time.perf_counter() 
 
         z = np.zeros((12, self._N), dtype=np.float64) 
         u = np.zeros((6, self._N), dtype=np.float64)
+        Nu = int(Tu/self._Ts)
 
         for k in range(self._N):
-            u[:, k] = self._u_step if k < self._Nu else 0.0
+            u[:, k] = self._u0 if k < Nu else 0.0
 
         Ts = self._Ts
-        Tu = self._Nu * Ts
+        Tu = Nu * Ts
 
         for i in range(6):
             w = wcv[i]
@@ -247,19 +270,18 @@ class Robot:
                     
         end = time.perf_counter() 
         print(f"Elapsed time for exact simulation: {(end - start) * 1e3:.3f} ms") 
-
         return z, u
 
-    # Like having this in the control loop so its apperent what gets computed
-    # def compute_output(self, z):
-    #     y = np.zeros((13,self._N), dtype=np.float64)
 
-    #     for k in range (0,self._N):
-    #         q = z[:6,k]; qdot = z[6:,k]
-    #         y[:7,k] = self._forward_kinematics(q)
-    #         y[7:,k] = self._diff_kinematic(q, qdot)
+    def compute_output(self, z):
+        y = np.zeros((13,self._N), dtype=np.float64)
 
-    #     return y
+        for k in range (0,self._N):
+            q = z[:6,k]; qdot = z[6:,k]
+            y[:7,k] = self._forward_kinematics(q)
+            y[7:,k] = self._diff_kinematic(q, qdot)
+
+        return y
     
     def compute_inertia_matrix(self, q):
         model = self._urdf_loader.model
@@ -268,16 +290,7 @@ class Robot:
         # Calcolo della matrice di inerzia tramite CRBA
         M = pin.crba(model, data, q)
         M = (M + M.T) * 0.5       # Simmetrizzazione numerica, consigliata da Pinocchio
-
         return M
-
-    def update(self, z_k, u_k, t, dt):
-        next_state = self._integration_method(z_k, u_k, dt)
-        self.z[:, t + 1] = next_state
-        self.u[:, t + 1] = u_k
-        self._ee_pose_log[:, t + 1] = self.forward_kinematics(next_state[:6])
-        self._ee_velocity_log[:, t + 1] = self.diff_kinematic(next_state[:6], next_state[6:])
-        return next_state
     
     def get_state(self, index: int) -> FloatArray:
         return self.z[:, -1]

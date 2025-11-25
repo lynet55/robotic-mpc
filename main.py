@@ -11,7 +11,7 @@ from model import Robot as six_dof_model
 from model_casadi import SixDofRobot as prediction_model
 from surface import Surface
 
-def run_sim(scene, model, mpc, N, dt, trajectory, delay_time):
+def run_sim(scene, model, mpc, trajectory, delay_time):
     """
     Run the closed-loop simulation.
 
@@ -65,7 +65,7 @@ def run_sim(scene, model, mpc, N, dt, trajectory, delay_time):
     task_rpy = surface.get_rpy(task_xyz_surface[0], task_xyz_surface[1])
 
     #Simulation Loop
-    for t in range(0, N - 1):
+    for t in range(0, model.N - 1):
 
         #Random refferences
         if t % 100 == 0:
@@ -98,7 +98,7 @@ def run_sim(scene, model, mpc, N, dt, trajectory, delay_time):
         predicted_ee_velocities = np.array(predicted_ee_velocities)
       
         #State Update and State Feedback
-        model.update(model.state(t), optimal_control, t, dt)
+        model.update(model.state(t), optimal_control, t)
         q1, q2, q3, q4, q5, q6 = model.joint_angles(t)
         
         # Accumulate trajectory
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         urdf_loader=robot_loader,
         z0=z0,
         u0=u0,
-        N=N,
+        T=total_time,
         Ts=sample_time,
         wcv=np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0]),
         integration_method="RK4"
@@ -188,8 +188,6 @@ if __name__ == "__main__":
         scene,
         robot,
         mpc,
-        N,
-        dt,
         surface_trajectory,
-        delay_time = 0,
+        delay_time = 0.5,
     )

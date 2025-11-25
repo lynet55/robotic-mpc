@@ -9,6 +9,7 @@ T  = 4.0
 Tu = 4.0
 u_step = 0.1
 
+u_0 = u_step * np.array([1, 1, 1, 1, 1, 1], dtype=np.float64)
 q_0 = np.zeros(6, dtype=np.float64)
 qdot_0 = np.zeros(6, dtype=np.float64)
 z_0 = np.hstack((q_0, qdot_0))
@@ -18,14 +19,23 @@ w_cv = np.array([5, 10, 20, 30, 40, 50], dtype=np.float64)
 def analyze_global_error():
     urdf = UrdfLoader('ur5_robot')
 
-    N_list = np.logspace(1, 5, num=9, dtype=int)  
+    N_list = np.logspace(1, 5, num=9, dtype=int) l 
     Ts_list = []
 
     M_euler, err_euler  = np.zeros(len(N_list), dtype=float), np.zeros(len(N_list), dtype=float)
     M_rk2,   err_rk2    = np.zeros(len(N_list), dtype=float), np.zeros(len(N_list), dtype=float)
     M_rk4,   err_rk4    = np.zeros(len(N_list), dtype=float), np.zeros(len(N_list), dtype=float)
 
-    robot = Robot(1, T, Tu, z_0, u_step, urdf)
+    # robot = Robot(1, T, Tu, z_0, u_step, urdf)
+
+    robot = Robot(
+        urdf_loader=urdf,
+        z0=z_0,
+        u0=u_0,
+        T=T,
+        Ts=Ts,
+        wcv=w_cv
+    )
 
     for i, N in enumerate(N_list):
         Ts = float(T / N)
@@ -36,25 +46,25 @@ def analyze_global_error():
         robot.Ts = Ts
 
         # Lagrange Formula
-        z_exact, _ = robot.lagrange_formula(w_cv)
+        z_exact, _ = robot.lagrange_formula(Tu)
         zT_exact = z_exact[:, -1]
 
         # Euler
-        z_euler, _ = robot.euler_simulation(w_cv)
+        z_euler, _ = robot.euler_simulation()
         zT_euler = z_euler[:, -1]
         err = np.linalg.norm(zT_euler - zT_exact)
         M_euler[i] = 1 * N    # s = 1
         err_euler[i] = err
 
         # RK2
-        z_rk2, _ = robot.rk2_mp_simulation(w_cv)
+        z_rk2, _ = robot.rk2_mp_simulation()
         zT_rk2 = z_rk2[:, -1]
         err = np.linalg.norm(zT_rk2 - zT_exact)
         M_rk2[i] = 2 * N     # s = 2
         err_rk2[i] = err
 
         # RK4
-        z_rk4, _ = robot.rk4_simulation(w_cv)
+        z_rk4, _ = robot.rk4_simulation()
         zT_rk4 = z_rk4[:, -1]
         err = np.linalg.norm(zT_rk4 - zT_exact)
         M_rk4[i] = 4 * N      # s = 4
