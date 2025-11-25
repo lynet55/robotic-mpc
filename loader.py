@@ -14,7 +14,8 @@ class UrdfLoader:
         self._vmodel = None
         self._cmodel = None
         self._data: Optional[pin.Data] = None
-        self._fee = None
+        self._fee: Optional[int] = None
+
 
         try:
             self._model, self._vmodel, self._cmodel = pin.buildModelsFromUrdf(
@@ -24,7 +25,13 @@ class UrdfLoader:
             print(f"URDF successfully loaded: {self._urdf_file_path}")
             print(f"nq = {self._model.nq}, ngeoms(vis) = {self._vmodel.ngeoms}, ngeoms(col) = {self._cmodel.ngeoms}")
             self._data = self._model.createData()
-            self._fee = self._model.getFrameId('ee_fixed_joint')
+            try:
+                # Use 'tool0' as the canonical UR5 end-effector frame
+                self._fee = self._model.getFrameId("tool0")
+            except Exception as e:
+                raise RuntimeError(
+                    "Failed to resolve end-effector frame 'tool0' in the URDF model."
+                ) from e
 
         except FileNotFoundError as e:
             print(f"File not found: {e.filename}")

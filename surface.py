@@ -161,7 +161,7 @@ class Surface:
         rpy_result = rpy_func(x_surface, y_surface)
         return np.array(rpy_result).flatten()
     
-    def generate_simple_trajectory(self, initial_point_task_surface, time_increment, x_margin_surface, y_margin_surface, num_points_x=400, num_points_y=400, x_step=1, y_step=1):
+    def generate_simple_trajectory(self, initial_point_task_surface, time_increment, x_margin_surface, y_margin_surface, num_points=400, x_step=1, y_step=1):
         """
         Generate a serpentine trajectory over the surface grid.
         
@@ -181,8 +181,10 @@ class Surface:
             y_step: grid index decrement when stepping down each row along y.
         
         Returns:
-            np.ndarray of shape (N, 3) with [x, y, z] points in world coordinates.
+            np.ndarray of shape (N, 6) with [x, y, z, roll, pitch, yaw] in world coordinates.
         """
+        num_points_x = num_points
+        num_points_y = num_points
         x_min, x_max = self.limits[0]
         y_min, y_max = self.limits[1]
         
@@ -229,9 +231,18 @@ class Surface:
             x_dir *= -1
         
         # Map local (x, y) waypoints to world-frame [x, y, z] on the surface
-        path_points_world = [self.get_point_on_surface(x, y)[1] for x, y in path_points]
-        
-        return np.array(path_points_world)
+        path_points_world = []
+        path_orientations = []
+        rpy_func = self.get_rpy_function()
+
+        for x, y in path_points:
+            _, world_point = self.get_point_on_surface(x, y)
+            path_points_world.append(world_point)
+            path_orientations.append(np.array(rpy_func(x, y)).flatten())
+
+        positions = np.array(path_points_world)
+        orientations = np.array(path_orientations)
+        return np.hstack((positions, orientations))
 
     def get_normal_vector(self, x_surface, y_surface):
         # Compute partial derivatives symbolically

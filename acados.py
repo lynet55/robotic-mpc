@@ -191,7 +191,6 @@ class MPC:
         self.ocp.constraints.ubu = np.array([q_dot_max] * 6)
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
-        # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
 
         self.solver = AcadosOcpSolver(self.ocp, json_file='acados_ocp.json')
@@ -233,6 +232,15 @@ class MPC:
         )
          
         return transformed_point
-    
 
     
+    def optimal_control(self, tracking_variables):
+        for k in range(self.ocp.dims.N + 1):
+            self.solver.set(k, "p", tracking_variables)
+        status = self.solver.solve()
+        if status != 0:
+            print(f"MPC warning: solver status {status} at t={t}; using fallback control")
+            optimal_control = np.zeros(self.nx)
+        else:
+            optimal_control = self.solver.get(0, "u")
+        return optimal_control
