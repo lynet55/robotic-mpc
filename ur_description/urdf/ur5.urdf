@@ -337,7 +337,7 @@
            to correctly align 'base' with the 'Base' coordinate system of
            the UR controller.
       -->
-    <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
     <parent link="base_link"/>
     <child link="base"/>
   </joint>

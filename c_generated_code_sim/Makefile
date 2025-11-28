@@ -42,23 +42,6 @@ MODEL_SRC+= six_dof_robot_model_model/six_dof_robot_model_expl_vde_forw.c
 MODEL_SRC+= six_dof_robot_model_model/six_dof_robot_model_expl_vde_adj.c
 
 MODEL_OBJ := $(MODEL_SRC:.c=.o)
-# optimal control problem - mostly CasADi exports
-OCP_SRC=
-
-
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_0_fun.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_0_fun_jac_ut_xt.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_0_hess.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_fun.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_fun_jac_ut_xt.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_hess.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_fun.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_fun_jac_ut_xt.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_hess.c
-
-OCP_SRC+= acados_solver_six_dof_robot_model.c
-
-OCP_OBJ := $(OCP_SRC:.c=.o)
 # for sim solver
 SIM_SRC= acados_sim_solver_six_dof_robot_model.c
 SIM_OBJ := $(SIM_SRC:.c=.o)
@@ -67,17 +50,12 @@ SIM_OBJ := $(SIM_SRC:.c=.o)
 EX_SIM_SRC= main_sim_six_dof_robot_model.c
 EX_SIM_OBJ := $(EX_SIM_SRC:.c=.o)
 EX_SIM_EXE := $(EX_SIM_SRC:.c=)
-# for target example
-EX_SRC= main_six_dof_robot_model.c
-EX_OBJ := $(EX_SRC:.c=.o)
-EX_EXE := $(EX_SRC:.c=)
 
 
 # combine model, (potentially) sim and ocp object files
 OBJ=
 OBJ+= $(MODEL_OBJ)
 OBJ+= $(SIM_OBJ)
-OBJ+= $(OCP_OBJ)
 
 EXTERNAL_DIR=
 EXTERNAL_LIB=
@@ -116,54 +94,16 @@ LIBACADOS_SIM_SOLVER=lib$(SIM_SRC:.c=.so)
 
 # virtual targets
 .PHONY : all clean
-
-	all: clean example_sim example
-shared_lib: bundled_shared_lib ocp_shared_lib sim_shared_lib
+all: clean example_sim
+shared_lib: sim_shared_lib
 
 # some linker targets
-example: $(EX_OBJ) $(OBJ)
-	$(CC) $^ -o $(EX_EXE) $(LDFLAGS) $(LDLIBS)
 
 example_sim: $(EX_SIM_OBJ) $(MODEL_OBJ) $(SIM_OBJ)
 	$(CC) $^ -o $(EX_SIM_EXE) $(LDFLAGS) $(LDLIBS)
 
 sim_shared_lib: $(SIM_OBJ) $(MODEL_OBJ)
 	$(CC) -shared $^ -o $(LIBACADOS_SIM_SOLVER) $(LDFLAGS) $(LDLIBS)
-bundled_shared_lib: $(OBJ)
-	$(CC) -shared $^ -o $(LIBACADOS_SOLVER) $(LDFLAGS) $(LDLIBS)
-
-ocp_shared_lib: $(OCP_OBJ) $(MODEL_OBJ)
-	$(CC) -shared $^ -o $(LIBACADOS_OCP_SOLVER) $(LDFLAGS) $(LDLIBS) \
-	-L$(EXTERNAL_DIR) -l$(EXTERNAL_LIB)
-
-
-# Cython targets
-ocp_cython_c: ocp_shared_lib
-	cython \
-	-o acados_ocp_solver_pyx.c \
-	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
-	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_ocp_solver_pyx.pyx \
-	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code \
-
-ocp_cython_o: ocp_cython_c
-	$(CC) $(ACADOS_FLAGS) -c -O2 \
-	-fPIC \
-	-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION \
-	-o acados_ocp_solver_pyx.o \
-	-I $(INCLUDE_PATH)/blasfeo/include/ \
-	-I $(INCLUDE_PATH)/hpipm/include/ \
-	-I $(INCLUDE_PATH) \
-	-I /root/miniforge3/lib/python3.12/site-packages/numpy/_core/include \
-	-I /root/miniforge3/include/python3.12 \
-	acados_ocp_solver_pyx.c \
-
-ocp_cython: ocp_cython_o
-	$(CC) $(ACADOS_FLAGS) -shared \
-	-o acados_ocp_solver_pyx.so \
-	-Wl,-rpath=$(LIB_PATH) \
-	acados_ocp_solver_pyx.o \
-	$(abspath .)/libacados_ocp_solver_six_dof_robot_model.so \
-	$(LDFLAGS) $(LDLIBS)
 
 
 # Sim Cython targets
@@ -172,7 +112,7 @@ sim_cython_c: sim_shared_lib
 	-o acados_sim_solver_pyx.c \
 	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
 	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_sim_solver_pyx.pyx \
-	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code \
+	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code_sim \
 
 sim_cython_o: sim_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
@@ -198,15 +138,6 @@ clean:
 	$(RM) $(OBJ) $(EX_OBJ) $(EX_SIM_OBJ)
 	$(RM) $(LIBACADOS_SOLVER) $(LIBACADOS_OCP_SOLVER) $(LIBACADOS_SIM_SOLVER)
 	$(RM) $(EX_EXE) $(EX_SIM_EXE)
-clean_ocp_shared_lib:
-	$(RM) $(LIBACADOS_OCP_SOLVER)
-	$(RM) $(OCP_OBJ)
-
-clean_ocp_cython:
-	$(RM) libacados_ocp_solver_six_dof_robot_model.so
-	$(RM) acados_solver_six_dof_robot_model.o
-	$(RM) acados_ocp_solver_pyx.so
-	$(RM) acados_ocp_solver_pyx.o
 
 clean_sim_cython:
 	$(RM) libacados_sim_solver_six_dof_robot_model.so

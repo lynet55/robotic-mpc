@@ -10,17 +10,16 @@ class Surface:
 
         self.x = ca.SX.sym("x")
         self.y = ca.SX.sym("y")
-        # a, b, c, d, e, f = 1.0, 0.5, 0.2, -0.3, 0.7, 0.0
-        # self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
+        a, b, c, d, e, f = -0.1, 0.1, -0.01, 0.01, 0.01, 0.0
+        self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
 
+        '''
         wave_amplitude = 0.1
         wave_freq_x = 20.0
         wave_freq_y = 20.0
+        # |CORREZZIONE| Distinguerei la superficie quadratica da quella con sinusoidi
         self.quadratic_surface = wave_amplitude * (ca.sin(wave_freq_x * self.x) + ca.sin(wave_freq_y * self.y))
-
-
-    def get_surface_height(self, x, y):
-        return self.quadratic_surface(x, y)
+        '''
 
     def get_position(self):
         return self.position
@@ -38,7 +37,7 @@ class Surface:
         return self.desired_offset
 
     def get_surface_function(self):
-        return ca.Function("surface", [self.x, self.y], [self.quadratic_surface])
+        return ca.Function("surface", [self.x, self.y], [self.quadratic_surface], ['x','y'], ['S(x,y)'])
 
     def get_random_point_on_surface(self):
         """
@@ -99,30 +98,25 @@ class Surface:
         R = Rz @ Ry @ Rx
 
         return R @ point_surface_frame + self.position
-        
+      
     def get_rpy_function(self):
-        """
-        Create a CasADi function that computes RPY angles at any (x, y) point 
-        on the surface. Produces a full rotation whose Z axis aligns with 
-        the surface normal and whose X axis is tangent and aligned with the 
-        projection of global X so yaw is well-defined.
-        """
 
         # Partial derivatives
-        dz_dx = ca.jacobian(self.quadratic_surface, self.x)
-        dz_dy = ca.jacobian(self.quadratic_surface, self.y)
+        dS_dx = ca.jacobian(self.quadratic_surface, self.x)
+        dS_dy = ca.jacobian(self.quadratic_surface, self.y)
 
         # Unnormalized normal
-        nx = -dz_dx
-        ny = -dz_dy
-        nz = 1.0
+        nx = dS_dx
+        ny = dS_dy
+        nz = -1.0
 
         # Normalize
         norm = ca.sqrt(nx**2 + ny**2 + nz**2)
         nx = nx / norm
         ny = ny / norm
         nz = nz / norm
-
+        # |CORREZZIONE| Il constraint sull'orientamento del task frame va formulato come task constraint
+        #               nella cost function. 
         # Normal vector
         n = ca.vertcat(nx, ny, nz)
         # Global X basis
@@ -235,13 +229,13 @@ class Surface:
 
     def get_normal_vector(self, x_surface, y_surface):
         # Compute partial derivatives symbolically
-        dz_dx = ca.jacobian(self.quadratic_surface, self.x)
-        dz_dy = ca.jacobian(self.quadratic_surface, self.y)
+        dS_dx = ca.jacobian(self.quadratic_surface, self.x)
+        dS_dy = ca.jacobian(self.quadratic_surface, self.y)
         
         # Normal vector components
-        nx = -dz_dx
-        ny = -dz_dy
-        nz = 1.0
+        nx = dS_dx
+        ny = dS_dy
+        nz = -1.0
         
         # Normalize
         norm = ca.sqrt(nx**2 + ny**2 + nz**2)
@@ -259,21 +253,23 @@ class Surface:
         # Convert to numpy array with numerical values
         return np.array([float(nx_val), float(ny_val), float(nz_val)])
     
-    def get_normal_vector_casadi(self, x_surface, y_surface):
+    def get_normal_vector_casadi(self):
         # Assume self.quadratic_surface is expressed in terms of x_sym, y_sym
         # Compute partial derivatives symbolically
         dz_dx = ca.jacobian(self.quadratic_surface, self.x)
         dz_dy = ca.jacobian(self.quadratic_surface, self.y)
         
         # Normal vector components
-        nx = -dz_dx
-        ny = -dz_dy
-        nz = 1.0
+        nx = dz_dx
+        ny = dz_dy
+        nz = -1.0
         
         # Normalize
         norm = ca.sqrt(nx**2 + ny**2 + nz**2)
         nx_norm = nx / norm
         ny_norm = ny / norm
         nz_norm = nz / norm
+
+        n = ca.vertcat(nx_norm, ny_norm, nz_norm)
         
-        return ca.vertcat(nx_norm, ny_norm, nx_norm)
+        return ca.Function("surface", [self.x, self.y], [n], ['x','y'], ['n'])
