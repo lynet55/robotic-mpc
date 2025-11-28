@@ -52,9 +52,6 @@ OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_0_hess.c
 OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_fun.c
 OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_fun_jac_ut_xt.c
 OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_hess.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_fun.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_fun_jac_ut_xt.c
-OCP_SRC+= six_dof_robot_model_cost/six_dof_robot_model_cost_y_e_hess.c
 
 OCP_SRC+= acados_solver_six_dof_robot_model.c
 
@@ -143,7 +140,7 @@ ocp_cython_c: ocp_shared_lib
 	-o acados_ocp_solver_pyx.c \
 	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
 	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_ocp_solver_pyx.pyx \
-	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code \
+	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code_ocp \
 
 ocp_cython_o: ocp_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
@@ -172,7 +169,7 @@ sim_cython_c: sim_shared_lib
 	-o acados_sim_solver_pyx.c \
 	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
 	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_sim_solver_pyx.pyx \
-	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code \
+	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code_ocp \
 
 sim_cython_o: sim_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
