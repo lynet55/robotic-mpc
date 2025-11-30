@@ -427,8 +427,7 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     else
     {
         // set time_steps
-    
-        double time_step = 0.001;
+    double time_step = 0.001;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);

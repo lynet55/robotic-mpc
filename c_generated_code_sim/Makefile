@@ -32,6 +32,8 @@
 
 
 
+
+
 # define sources and use make's implicit rules to generate object files (*.o)
 
 # model
@@ -60,8 +62,8 @@ OBJ+= $(SIM_OBJ)
 EXTERNAL_DIR=
 EXTERNAL_LIB=
 
-INCLUDE_PATH = /mnt/c/Users/Crist/robotic-mpc/acados/include
-LIB_PATH = /mnt/c/Users/Crist/robotic-mpc/acados/lib
+INCLUDE_PATH = /Users/bb/Desktop/robotic-mpc/acados/include
+LIB_PATH = /Users/bb/Desktop/robotic-mpc/acados/lib
 
 # preprocessor flags for make's implicit rules
 CPPFLAGS+= -I$(INCLUDE_PATH)
@@ -88,9 +90,9 @@ LDLIBS+= -lm
 LDLIBS+= 
 
 # libraries
-LIBACADOS_SOLVER=libacados_solver_six_dof_robot_model.so
-LIBACADOS_OCP_SOLVER=libacados_ocp_solver_six_dof_robot_model.so
-LIBACADOS_SIM_SOLVER=lib$(SIM_SRC:.c=.so)
+LIBACADOS_SOLVER=libacados_solver_six_dof_robot_model.dylib
+LIBACADOS_OCP_SOLVER=libacados_ocp_solver_six_dof_robot_model.dylib
+LIBACADOS_SIM_SOLVER=lib$(SIM_SRC:.c=.dylib)
 
 # virtual targets
 .PHONY : all clean
@@ -112,7 +114,7 @@ sim_cython_c: sim_shared_lib
 	-o acados_sim_solver_pyx.c \
 	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
 	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_sim_solver_pyx.pyx \
-	-I /mnt/c/Users/Crist/robotic-mpc/c_generated_code_sim \
+	-I /Users/bb/Desktop/robotic-mpc/c_generated_code_sim \
 
 sim_cython_o: sim_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
@@ -122,16 +124,16 @@ sim_cython_o: sim_cython_c
 	-I $(INCLUDE_PATH)/blasfeo/include/ \
 	-I $(INCLUDE_PATH)/hpipm/include/ \
 	-I $(INCLUDE_PATH) \
-	-I /root/miniforge3/lib/python3.12/site-packages/numpy/_core/include \
-	-I /root/miniforge3/include/python3.12 \
+	-I /opt/homebrew/Caskroom/miniforge/base/envs/robotics/lib/python3.11/site-packages/numpy/_core/include \
+	-I /opt/homebrew/Caskroom/miniforge/base/envs/robotics/include/python3.11 \
 	acados_sim_solver_pyx.c \
 
 sim_cython: sim_cython_o
 	$(CC) $(ACADOS_FLAGS) -shared \
-	-o acados_sim_solver_pyx.so \
+	-o acados_sim_solver_pyx.dylib \
 	-Wl,-rpath=$(LIB_PATH) \
 	acados_sim_solver_pyx.o \
-	$(abspath .)/libacados_sim_solver_six_dof_robot_model.so \
+	$(abspath .)/libacados_sim_solver_six_dof_robot_model.dylib \
 	$(LDFLAGS) $(LDLIBS)
 
 clean:
@@ -140,7 +142,7 @@ clean:
 	$(RM) $(EX_EXE) $(EX_SIM_EXE)
 
 clean_sim_cython:
-	$(RM) libacados_sim_solver_six_dof_robot_model.so
+	$(RM) libacados_sim_solver_six_dof_robot_model.dylib
 	$(RM) acados_sim_solver_six_dof_robot_model.o
-	$(RM) acados_sim_solver_pyx.so
+	$(RM) acados_sim_solver_pyx.dylib
 	$(RM) acados_sim_solver_pyx.o
