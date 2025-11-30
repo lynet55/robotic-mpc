@@ -1,10 +1,10 @@
 {
-    "acados_include_path": "/mnt/c/Users/Crist/robotic-mpc/acados/include",
-    "acados_lib_path": "/mnt/c/Users/Crist/robotic-mpc/acados/lib",
-    "code_export_directory": "/mnt/c/Users/Crist/robotic-mpc/c_generated_code_sim",
+    "acados_include_path": "/Users/bb/Desktop/robotic-mpc/acados/include",
+    "acados_lib_path": "/Users/bb/Desktop/robotic-mpc/acados/lib",
+    "code_export_directory": "/Users/bb/Desktop/robotic-mpc/c_generated_code_sim",
     "cython_include_dirs": [
-        "/root/miniforge3/lib/python3.12/site-packages/numpy/_core/include",
-        "/root/miniforge3/include/python3.12"
+        "/opt/homebrew/Caskroom/miniforge/base/envs/robotics/lib/python3.11/site-packages/numpy/_core/include",
+        "/opt/homebrew/Caskroom/miniforge/base/envs/robotics/include/python3.11"
     ],
     "dims": {
         "np": 0,
@@ -114,7 +114,7 @@
     "parameter_values": [],
     "problem_class": "SIM",
     "ros_opts": null,
-    "shared_lib_ext": ".so",
+    "shared_lib_ext": ".dylib",
     "simulink_opts": null,
     "solver_options": {
         "Tsim": 0.001,

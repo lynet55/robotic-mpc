@@ -1,6 +1,9 @@
 acados
 __pycache__
+.DS_Store
 .vscode
 c_generated_code
+c_generated_code_ocp
+c_generated_code_sim
 run.sh
 acados_ocp.json
