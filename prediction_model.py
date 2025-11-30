@@ -6,7 +6,7 @@ from acados_template import AcadosModel
 
 
 class SixDofRobot:
-    def __init__(self, urdf_loader, Wcv=None):
+    def __init__(self, urdf_loader, translation_ee_t=[0,0,0.40], Wcv=None):
         # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
         self._data = urdf_loader.data
@@ -27,6 +27,13 @@ class SixDofRobot:
         if self._ee_frame_id >= self._model.nframes:
             raise ValueError(f"Frame 'tool0' not found in model. Available frames: {[self._model.frames[i].name for i in range(self._model.nframes)]}")
         
+        if isinstance(translation_ee_t, (list, np.ndarray)):
+            self.translation = ca.vertcat(translation_ee_t[0], 
+                                          translation_ee_t[1], 
+                                          translation_ee_t[2])
+        else:
+            self.translation = translation_ee_t
+
         # Speed loop bandwidths (diagonal matrix)
         if Wcv is None:
             Wcv = np.ones(self.n_dof)  # Default parameters
@@ -171,6 +178,64 @@ class SixDofRobot:
         yaw = ca.atan2(R[1, 0], R[0, 0])
         
         return ca.vertcat(roll, pitch, yaw)
+
+    def _ee_to_task_transform(self, pose_ee):
+        """
+        Map the end-effector pose in the world frame to the task frame pose
+        in the world frame.
+
+        The end-effector pose is given as a 12x1 CasADi vector
+        [p_ee; R_w_ee(:)], where:
+            - p_ee ∈ R^3 is the position of the EE origin expressed in WORLD
+            - R_w_ee ∈ R^{3x3} is the rotation matrix from EE frame to WORLD,
+            stored row-wise as:
+                [R11, R12, R13,
+                R21, R22, R23,
+                R31, R32, R33]^T
+
+        The task frame is defined as a frame rigidly attached to the EE frame,
+        obtained by:
+            - a rotation of π around the EE x-axis
+            - a translation t expressed in the EE frame
+
+        Args:
+            pose_ee: CasADi SX/DX vector of size 12:
+                    [p_ee(0:3); R_w_ee flattened row-wise (9 elements)].
+
+        Returns:
+            p_t:         3x1 CasADi vector, position of the task frame origin
+                        expressed in WORLD coordinates.
+            R_w_t_flat:  9x1 CasADi vector, rotation matrix R_w_t flattened
+                        row-wise (same convention as pose_ee).
+        """
+
+        p_ee = pose_ee[:3]
+
+        R_w_ee = ca.vertcat(
+            ca.hcat([pose_ee[3],  pose_ee[4],  pose_ee[5]]),
+            ca.hcat([pose_ee[6],  pose_ee[7],  pose_ee[8]]),
+            ca.hcat([pose_ee[9],  pose_ee[10], pose_ee[11]]),
+        )
+
+        c = -1
+        s = 0
+        R_ee_t = ca.vertcat(
+            ca.hcat([1, 0,  0]),
+            ca.hcat([0, 1, 0]),
+            ca.hcat([0, 0,  1]),
+        )
+
+        R_w_t = R_w_ee @ R_ee_t
+
+        p_t = p_ee + R_w_ee @ self.translation
+
+        R_w_t_flat = ca.vertcat(
+            R_w_t[0, 0], R_w_t[1, 0], R_w_t[2, 0],
+            R_w_t[0, 1], R_w_t[1, 1], R_w_t[2, 1],
+            R_w_t[0, 2], R_w_t[1, 2], R_w_t[2, 2],
+        )
+
+        return p_t, R_w_t_flat
     
 
     def _generate_dynamics_model(self) -> AcadosModel:
@@ -190,7 +255,9 @@ class SixDofRobot:
         # Output 
         pose_ee_rot  = self.fk_casadi_rot(q)  # position + rotation matrix
         vee = self.dk_casadi(q, q_dot)
-        y = ca.vertcat(pose_ee_rot, vee)
+
+        p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
+        y = ca.vertcat(p_task, R_task, vee)
 
         # Constants
         Wcv = ca.diag(self._Wcv)

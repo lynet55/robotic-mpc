@@ -1,4 +1,3 @@
-
 from turtle import delay, position
 import casadi as ca
 import numpy as np
@@ -27,6 +26,7 @@ def run_sim(scene, model, mpc, Nsim, x0):
 
     solver = mpc.solver
     integrator = mpc.setup_integrator(Tf/N_horizon)
+    #S = mpc.surface.get_surface_function()
 
     nx = solver.acados_ocp.dims.nx
     nu = solver.acados_ocp.dims.nu
@@ -35,11 +35,18 @@ def run_sim(scene, model, mpc, Nsim, x0):
     simX = np.zeros((Nsim+1, nx))
     simU = np.zeros((Nsim, nu))
     pose_ee_euler = np.zeros((Nsim+1, 6)) 
-    vee = np.zeros((Nsim+1, 6)) 
+    vee = np.zeros((Nsim+1, n_dof)) 
+
+    e = np.zeros((Nsim+1, 5), dtype=np.float64)
+   
 
     simX[0,:] = x0
     pose_ee_euler[0] = np.array(model.forward_kinematics_euler(simX[0,:n_dof])).flatten()
     vee[0] = np.array(model.differential_kinematics(simX[0,:n_dof], simX[0,n_dof:])).flatten()
+
+    #e[0,0] = S()
+
+
 
     t = np.zeros((Nsim)) 
 
@@ -95,8 +102,12 @@ def run_sim(scene, model, mpc, Nsim, x0):
         scene.update_triad("frames/end_effector_frame", position=pose_ee_euler[i+1][:3], orientation_rpy=pose_ee_euler[i+1][3:6])
         scene.update_line(path="lines/ee_trajectory",points=traj_array,)
 
-    
+
     print("\nSimulation complete!")
+    # evaluate timings
+    # scale to milliseconds
+    t *= 1000
+    print(f'Computation time in ms: min {np.min(t):.3f} median {np.median(t):.3f} max {np.max(t):.3f}')
 
   
 
@@ -113,9 +124,9 @@ if __name__ == "__main__":
 
     qdot_0 = np.array([2,2,2,2,2,2], dtype=np.float64)
     q_0 = np.array([
-    0.0,             # q1: base
+    np.pi/6,             # q1: base
     -np.pi/3,        # q2: spalla giù (braccio che si alza verso l'alto/z+)
-    np.pi/3,         # q3: gomito in avanti
+    np.pi/4,         # q3: gomito in avanti
     -np.pi/2,        # q4: polso perpendicolare alla superficie
     -np.pi/2,        # q5: orienta il tool verso il basso
     0.0              # q6: rotazione attorno all'asse del tool

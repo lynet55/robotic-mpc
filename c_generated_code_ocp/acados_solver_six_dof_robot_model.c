@@ -663,9 +663,9 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
 
    double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[0+(NY0) * 0] = 100;
+    W_0[0+(NY0) * 0] = 200;
     W_0[1+(NY0) * 1] = 50;
-    W_0[2+(NY0) * 2] = 200;
+    W_0[2+(NY0) * 2] = 300;
     W_0[3+(NY0) * 3] = 200;
     W_0[4+(NY0) * 4] = 100;
     W_0[5+(NY0) * 5] = 0.02;
@@ -689,9 +689,9 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     free(yref);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[0+(NY) * 0] = 100;
+    W[0+(NY) * 0] = 200;
     W[1+(NY) * 1] = 50;
-    W[2+(NY) * 2] = 200;
+    W[2+(NY) * 2] = 300;
     W[3+(NY) * 3] = 200;
     W[4+(NY) * 4] = 100;
     W[5+(NY) * 5] = 0.02;
@@ -742,10 +742,12 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     double* lbx0 = lubx0;
     double* ubx0 = lubx0 + NBX0;
     // change only the non-zero elements:
+    lbx0[0] = 0.5235987755982988;
+    ubx0[0] = 0.5235987755982988;
     lbx0[1] = -1.0471975511965976;
     ubx0[1] = -1.0471975511965976;
-    lbx0[2] = 1.0471975511965976;
-    ubx0[2] = 1.0471975511965976;
+    lbx0[2] = 0.7853981633974483;
+    ubx0[2] = 0.7853981633974483;
     lbx0[3] = -1.5707963267948966;
     ubx0[3] = -1.5707963267948966;
     lbx0[4] = -1.5707963267948966;
@@ -1084,8 +1086,9 @@ void six_dof_robot_model_acados_set_nlp_out(six_dof_robot_model_solver_capsule* 
     double* x0 = xu0;
 
     // initialize with x0
+    x0[0] = 0.5235987755982988;
     x0[1] = -1.0471975511965976;
-    x0[2] = 1.0471975511965976;
+    x0[2] = 0.7853981633974483;
     x0[3] = -1.5707963267948966;
     x0[4] = -1.5707963267948966;
     x0[6] = 2;
