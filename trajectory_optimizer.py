@@ -50,14 +50,14 @@ class MPC:
         self.ocp.solver_options.nlp_solver_type = 'SQP' # [SQP, 'SQP_RTI', 'DDP','SQP_WITH_FEASIBLE_QP']
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # ['GAUSS_NEWTON', 'EXACT']
 
-        self.ocp.solver_options.print_level = 3 # verbosity of printing 
+        self.ocp.solver_options.print_level = 1 
 
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         self.ocp.code_export_directory = 'c_generated_code_ocp'
 
         self.ocp.solver_options.integrator_type = 'ERK'
-        self.ocp.solver_options.sim_method_num_stages = 4 # (deafult) RK4
+        self.ocp.solver_options.sim_method_num_stages = 4
         self.ocp.solver_options.sim_method_num_steps = 1
 
         # set prediction horizon

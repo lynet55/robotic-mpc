@@ -165,5 +165,5 @@ if __name__ == "__main__":
         robot,
         mpc,
         Nsim,
-        x0,
+        x0
     )

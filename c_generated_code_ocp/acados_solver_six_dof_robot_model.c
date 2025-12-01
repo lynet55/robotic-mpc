@@ -1055,7 +1055,7 @@ static void six_dof_robot_model_acados_create_set_opts(six_dof_robot_model_solve
     double qp_solver_tol_comp = 0.00000001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_comp", &qp_solver_tol_comp);
 
-    int print_level = 3;
+    int print_level = 1;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
     int qp_solver_cond_ric_alg = 1;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_ric_alg", &qp_solver_cond_ric_alg);
