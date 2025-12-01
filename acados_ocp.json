@@ -952,7 +952,7 @@
         "nlp_solver_warm_start_first_qp": false,
         "nlp_solver_warm_start_first_qp_from_nlp": false,
         "num_threads_in_batch_solve": 1,
-        "print_level": 3,
+        "print_level": 1,
         "qp_solver": "PARTIAL_CONDENSING_HPIPM",
         "qp_solver_cond_N": 200,
         "qp_solver_cond_block_size": null,
