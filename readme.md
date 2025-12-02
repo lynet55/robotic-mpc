@@ -72,6 +72,13 @@ This project is developed for academic purposes as part of coursework at Politec
 ## Acknowledgments
 - [Ubbink et al. "Contactless Surface Following with Acceleration Limits: Enhancing Robot Manipulator Performance through Model Predictive Control." *European Control Conference (ECC)*, 2024.](https://docs.acados.org/)
 
+
+  "env": {
+    "ACADOS_SOURCE_DIR": "/Users/bb/Desktop/robotic-mpc/acados",
+    "DYLD_LIBRARY_PATH": "/Users/bb/Desktop/robotic-mpc/acados/lib"
+  },
+
+
 ## References
 
 
