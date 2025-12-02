@@ -7,7 +7,7 @@ from surface import Surface
 import numpy as np
 
 class Simulator:
-    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv):
+    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv, scene=True):
         self.dt = dt
         self.Nsim = int(simulation_time/dt)  # Total number of simulation steps
         self.prediction_horizon = prediction_horizon  # Number of steps in MPC horizon
@@ -20,7 +20,12 @@ class Simulator:
         self.wcv = wcv
 
         self.robot_loader = urdf('ur5')
-        self.scene = robot_visualizer(self.robot_loader)
+
+        if scene:
+            self.scene = robot_visualizer(self.robot_loader)
+        else:
+            self.scene = None
+
         self.surface = Surface(
             position=surface_origin,
             orientation_rpy=surface_orientation_rpy,
@@ -82,29 +87,25 @@ class Simulator:
             status = self.mpc.solver.solve()
             u = self.mpc.solver.get(0, "u")
 
-            # u = self.mpc.solver.solve_for_x0(x0_bar = current_state)
-            # integrator = self.mpc.setup_integrator(self.T/self.N)
-            # simX[t+1, :] = integrator.simulate(x=current_state, u=u)
-
-
+            #Integration Step
             self.simulation_model.update(self.simulation_model.state(t), u, t)
             q1, q2, q3, q4, q5, q6 = self.simulation_model.joint_angles(t)
 
             #Visual Update
-            self.scene.set_joint_angles({
-            "shoulder_pan_joint": q1,
-            "shoulder_lift_joint": q2,
-            "elbow_joint": q3,
-            "wrist_1_joint": q4,
-            "wrist_2_joint": q5,
-            "wrist_3_joint": q6
-            })
+            if self.scene is not None:
+                self.scene.set_joint_angles({
+                "shoulder_pan_joint": q1,
+                "shoulder_lift_joint": q2,
+                "elbow_joint": q3,
+                "wrist_1_joint": q4,
+                "wrist_2_joint": q5,
+                "wrist_3_joint": q6
+                })
 
-            self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
-            self.scene.update_line(path="lines/ee_trajectory",points=traj_array,)
-
+                self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
+    
 if __name__ == "__main__":
-    sim = Simulator(
+    sim0 = Simulator(
         dt=0.001,
         prediction_horizon=200,
         simulation_time=4000,
@@ -113,6 +114,10 @@ if __name__ == "__main__":
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
         qdot_0=np.array([2,2,2,2,2,2]),
         q_0=np.array([0.0, -np.pi/3, np.pi/3, -np.pi/2, -np.pi/2, 0.0]),
-        wcv=np.array([5,5,5,5,5,5])
+        wcv=np.array([5,5,5,5,5,5]),
+        scene=True
     )
-    sim.run()
+    sim0.run()
+    # sim0_solver = sim0.opc_solver.stats
+    # sim0_simulation_results = sim0.simulation_model.stats
+    # print(sim0.benchmark)

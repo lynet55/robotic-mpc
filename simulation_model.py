@@ -22,10 +22,10 @@ class Robot:
         self._N = Nsim
         self.wcv = np.diag(wcv)
 
-        self.z = np.zeros((12,self._N), dtype=np.float64)
-        self.u = np.zeros((6,self._N), dtype=np.float64)
-        self._ee_pose_log = np.zeros((6,self._N), dtype=np.float64)
-        self._ee_velocity_log = np.zeros((6,self._N), dtype=np.float64)
+        self.z = np.zeros((12,self._N + 1), dtype=np.float64)
+        self.u = np.zeros((6,self._N + 1), dtype=np.float64)
+        self._ee_pose_log = np.zeros((6,self._N + 1), dtype=np.float64)
+        self._ee_velocity_log = np.zeros((6,self._N + 1), dtype=np.float64)
 
         self._t = 0
         self.z[:, 0] = self._z0
