@@ -53,9 +53,6 @@ class Robot:
     def dt(self):
         return self._dt
     @property
-    def T(self):
-        return self._T
-    @property
     def N(self):
         return self._N
 
@@ -92,7 +89,7 @@ class Robot:
     def _euler_update(self, z_k, u_k, dt):
         """Forward Euler integration (RK1)."""
         k1 = self._continuos_time_state(z_k, u_k)
-        return z_k + self.dt * k1
+        return z_k + dt * k1
 
     def _rk2_update(self, z_k, u_k, dt):
         """Runge-Kutta 2nd order (midpoint method)."""
