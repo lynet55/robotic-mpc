@@ -133,7 +133,7 @@
     </collision>
     <inertial>
       <mass value="4.0"/>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
       <inertia ixx="0.00443333156" ixy="0.0" ixz="0.0" iyy="0.00443333156" iyz="0.0" izz="0.0072"/>
     </inertial>
   </link>
@@ -279,12 +279,12 @@
            Use the joint between 'base_link' and 'base_link_inertia' (a dummy
            link/frame) to introduce the necessary rotation over Z (of pi rad).
       -->
-    <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
   <joint name="shoulder_pan_joint" type="revolute">
     <parent link="base_link_inertia"/>
     <child link="shoulder_link"/>
-    <origin rpy="0 0 0" xyz="0 0 0.089159"/>
+    <origin rpy="0 0 3.141592653589793" xyz="0 0 0.089159"/>
     <axis xyz="0 0 1"/>
     <limit effort="150.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793"/>
     <dynamics damping="0" friction="0"/>

@@ -47,12 +47,8 @@ class Simulator:
 
         self.mpc = model_predictive_control(
             surface=self.surface,
-            state=self.prediction_model.state,
             initial_state=np.hstack((self.q_0, self.qdot_0)),
-            control_input=self.prediction_model.input,
             model=self.prediction_model,
-            forward_kinematics=self.prediction_model.fk_casadi_rot, 
-            differential_kinematics=self.prediction_model.dk_casadi,
             N_horizon=self.prediction_horizon,
             Tf=self.dt*self.prediction_horizon
         )
@@ -77,6 +73,17 @@ class Simulator:
             line_width=2.0
         )
 
+        pose_ee_euler_0 = self.simulation_model.forward_kinematics(self.q_0)
+        self.traj_points = [pose_ee_euler_0[:3].copy()]
+        self.traj_array = np.vstack(self.traj_points)
+
+        self.scene.add_line(
+            self.traj_array,
+            path="lines/ee_trajectory",
+            color=0xFF0000,
+            line_width=3.0,
+        )
+
     def run(self):
 
         for t in range(self.Nsim):
@@ -89,7 +96,7 @@ class Simulator:
 
             #Integration Step
             self.simulation_model.update(self.simulation_model.state(t), u, t)
-            q1, q2, q3, q4, q5, q6 = self.simulation_model.joint_angles(t)
+            q1, q2, q3, q4, q5, q6 = self.simulation_model.joint_angles(t+1)
 
             #Visual Update
             if self.scene is not None:
@@ -102,8 +109,15 @@ class Simulator:
                 "wrist_3_joint": q6
                 })
 
-                self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
-    
+            
+            self.traj_points.append(self.simulation_model.ee_position(t+1).copy())
+            self.traj_array = np.vstack(self.traj_points)
+
+            self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
+            self.scene.update_line(path="lines/ee_trajectory",points=self.traj_array,)
+
+
+
 if __name__ == "__main__":
     sim0 = Simulator(
         dt=0.001,
@@ -113,8 +127,8 @@ if __name__ == "__main__":
         surface_origin=np.array([0.0, 0.0, 0.0]),
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
         qdot_0=np.array([2,2,2,2,2,2]),
-        q_0=np.array([0.0, -np.pi/3, np.pi/3, -np.pi/2, -np.pi/2, 0.0]),
-        wcv=np.array([5,5,5,5,5,5]),
+        q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+        wcv=np.array([5,10,15,20,25,35]),
         scene=True
     )
     sim0.run()
