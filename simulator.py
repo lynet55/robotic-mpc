@@ -7,7 +7,7 @@ from surface import Surface
 import numpy as np
 
 class Simulator:
-    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv, scene=True):
+    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv):
         self.dt = dt
         self.Nsim = int(simulation_time/dt)  # Total number of simulation steps
         self.prediction_horizon = prediction_horizon  # Number of steps in MPC horizon
@@ -30,10 +30,14 @@ class Simulator:
             wcv=self.wcv,
             integration_method="RK4"
         )
+        self.surface = Surface(
+            position=self.surface_origin,
+            orientation_rpy=self.surface_orientation_rpy,
+            limits=self.surface_limits
+        )
 
-        if scene:
-            self.scene = robot_visualizer(self.robot_loader)
-            self.scene.add_surface_from_casadi(
+        self.scene = robot_visualizer(self.robot_loader)
+        self.scene.add_surface_from_casadi(
             self.surface.get_surface_function(),
             x_limits=self.surface.get_limits()[0],
             y_limits=self.surface.get_limits()[1],
@@ -41,24 +45,17 @@ class Simulator:
             path="surfaces/quadratic_surface",
             color=0x3399FF,
             opacity=0.6,    
-            origin=surface_origin,            
-            orientation_rpy=surface_orientation_rpy,    
-            )
-            self.scene.add_triad(
+            origin=self.surface_origin,            
+            orientation_rpy=self.surface_orientation_rpy   
+        )
+        self.scene.add_triad(
             position=self.simulation_model.ee_position(0),
             orientation_rpy=self.simulation_model.ee_orientation(0),
             path="frames/end_effector_frame",
             scale=0.2,
             line_width=2.0
         )
-        else:
-            self.scene = None
 
-        self.surface = Surface(
-            position=surface_origin,
-            orientation_rpy=surface_orientation_rpy,
-            limits=surface_limits
-        )
         self.prediction_model = prediction_robot_6dof(
             urdf_loader=self.robot_loader,
             Wcv=self.wcv
@@ -91,17 +88,16 @@ class Simulator:
             q1, q2, q3, q4, q5, q6 = self.simulation_model.joint_angles(t)
 
             #Visual Update
-            if self.scene is not None:
-                self.scene.set_joint_angles({
+            self.scene.set_joint_angles({
                 "shoulder_pan_joint": q1,
                 "shoulder_lift_joint": q2,
                 "elbow_joint": q3,
                 "wrist_1_joint": q4,
                 "wrist_2_joint": q5,
                 "wrist_3_joint": q6
-                })
+            })
 
-                self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
+            self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
 
     def get_results(self):
         data = {
@@ -123,11 +119,7 @@ if __name__ == "__main__":
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
         qdot_0=np.array([2,2,2,2,2,2]),
         q_0=np.array([0.0, -np.pi/3, np.pi/3, -np.pi/2, -np.pi/2, 0.0]),
-        wcv=np.array([5,5,5,5,5,5]),
-        scene=True
+        wcv=np.array([5,5,5,5,5,5])
     )
 
     sim0.run()
-    # sim0_solver = sim0.opc_solver.stats
-    # sim0_simulation_results = sim0.simulation_model.stats
-    # print(sim0.benchmark)
