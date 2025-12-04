@@ -66,13 +66,8 @@ class Surface:
         """
         surface_func = self.get_surface_function()
         # Generate random coordinates in local surface frame
-        x_rel = x_surface #Consider Clamping trhese to surface limits
-        y_rel = y_surface
-        z_rel = float(surface_func(x_rel, y_rel))
-        point_local = np.array([x_rel, y_rel, z_rel])
-        point_world = self.surface_to_world_transform(point_local)
-        
-        return (point_local, point_world)
+        z = float(surface_func(x_surface, y_surface))
+        return z
 
     def surface_to_world_transform(self, point_surface_frame):
         roll, pitch, yaw = self.orientation_rpy

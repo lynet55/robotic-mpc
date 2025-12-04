@@ -126,17 +126,6 @@ if __name__ == "__main__":
         wcv=np.array([5,5,5,5,5,5]),
         scene=True
     )
-    sim0.mpc.px_ref = 0.25
-    sim0.mpc.vy_ref = 0.7
-    sim0.mpc.w_u = 1e-9
-    sim0.mpc.w1 = 25.0
-    sim0.mpc.w2 = 5.0
-    sim0.mpc.w3 = 5.0
-    sim0.mpc.w4 = 5.0
-    sim0.mpc.w5 = 1.0
-    sim0.mpc.w_u = 1e-9
-    sim0.mpc.q_dot_ref_bound = 1.0
-    # sim0.mpc.q_dot_dot_bound = 1.0
 
     sim0.run()
     # sim0_solver = sim0.opc_solver.stats
