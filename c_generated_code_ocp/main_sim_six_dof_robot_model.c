@@ -83,12 +83,12 @@ int main()
     x_current[3] = -1.5707963267948966;
     x_current[4] = -1.5707963267948966;
     x_current[5] = 0;
-    x_current[6] = 2;
-    x_current[7] = 2;
-    x_current[8] = 2;
-    x_current[9] = 2;
-    x_current[10] = 2;
-    x_current[11] = 2;
+    x_current[6] = 0.9;
+    x_current[7] = 0.9;
+    x_current[8] = 0.9;
+    x_current[9] = 0.9;
+    x_current[10] = 0.9;
+    x_current[11] = 0.9;
     
   
 

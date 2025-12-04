@@ -7,7 +7,7 @@ class MPC:
     
     def __init__(self, surface, state, initial_state, control_input, model, 
                  forward_kinematics, differential_kinematics, N_horizon, Tf, 
-                 px_ref= 0.4, vy_ref=-0.40, surface_position=None, surface_rpy=None, 
+                 px_ref=0.7, vy_ref=0.25, w1=25.0, w2=5.0, w3=5.0, w4=5.0, w5=1.0, w_u=1, surface_position=None, surface_rpy=None, 
                  translation_ee_t=[0,0,0.40]):
         """
         Initialize MPC controller with explicit dependencies.
@@ -35,6 +35,17 @@ class MPC:
 
         self.px_ref = px_ref
         self.vy_ref = vy_ref
+
+        # Task errors weights
+        self.w1 = w1                      # (g1) task on surface (weight)
+        self.w2 = w2                           # (g2) task on normal alignment  (weight)
+        self.w3 = w3                           # (g3) y-axis of the task frame remains perpendicular to the x-axis of the surface frame (weight)
+        self.w4 = w4                           # (g4) fifth task constraint guides the task frame along the y-direction of the surface frame" (weight)
+        self.w5 = w5                           # (g5) Desired velocity of y component of task frame" (weight)
+        self.w_u = w_u                         # Control effort weight (10^-9) (weight)
+
+        self.q_dot_ref_bound = 1.0              # joint velocity [rad.s-1] (control input bounds)
+        # self.q_dot_dot_bound = 1.0            # joint acceleration [rad.s-2] (control input bounds)
 
         if isinstance(translation_ee_t, (list, np.ndarray)):
             self.translation = ca.vertcat(translation_ee_t[0], 
@@ -113,8 +124,8 @@ class MPC:
         g1_ref = 0     
         g2_ref = 1  
         g3_ref = 0
-        g4_ref = px_ref  
-        g5_ref = vy_ref
+        g4_ref = self.px_ref  
+        g5_ref = self.vy_ref
 
         g_ref = [g1_ref, g2_ref, g3_ref, g4_ref, g5_ref]
 
@@ -129,24 +140,14 @@ class MPC:
 
         g = ca.vertcat(g1, g2, g3, g4, g5)
         
-        # Task errors weights
-        w_origin_task = 100.0 
-        w_normal_alignment_task = 50.0     
-        w_x_alignment_task = 200.0
-        w_fixed_x_task = 200.0  
-        w_fixed_vy_task = 100.0
-
-        # Control effort weight
-        w_u = 0.01
-
         # Weights diagonal matrices
-        Q = np.array([ w_origin_task,     
-                       w_normal_alignment_task,        
-                       w_x_alignment_task,            
-                       w_fixed_x_task,       
-                       w_fixed_vy_task      
+        Q = np.array([ self.w1,     
+                       self.w2,        
+                       self.w3,            
+                       self.w4,       
+                       self.w5      
                     ])
-        R = 2 * np.array([w_u, w_u, w_u, w_u, w_u, w_u])
+        R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
         W = np.diag(np.concatenate([Q, R]))
 
@@ -159,11 +160,8 @@ class MPC:
         self.ocp.cost.W = W
 
         # Control input bounds (joint velocity commands)
-        q_dot_ref_max = 500.0  # Maximum joint velocity command
-
-        # Control input bounds (joint velocity commands)
-        self.ocp.constraints.lbu = np.array([-q_dot_ref_max] * 6)
-        self.ocp.constraints.ubu = np.array([q_dot_ref_max] * 6)
+        self.ocp.constraints.lbu = np.array([-self.q_dot_ref_bound] * 6)
+        self.ocp.constraints.ubu = np.array([self.q_dot_ref_bound] * 6)
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
         # Initial state constraint will be set at runtime
@@ -230,8 +228,6 @@ class MPC:
 
         return p_t, R_w_t_flat
 
-
-
     def setup_integrator(self, dt):
         sim = AcadosSim()
         sim.model = self.acados_model
@@ -241,5 +237,3 @@ class MPC:
         sim.code_export_directory = 'c_generated_code_sim'
         acados_integrator = AcadosSimSolver(sim)
         return acados_integrator
-
-    

@@ -21,16 +21,6 @@ class Simulator:
 
         self.robot_loader = urdf('ur5')
 
-        if scene:
-            self.scene = robot_visualizer(self.robot_loader)
-        else:
-            self.scene = None
-
-        self.surface = Surface(
-            position=surface_origin,
-            orientation_rpy=surface_orientation_rpy,
-            limits=surface_limits
-        )
         self.simulation_model = simulation_robot_6dof(
             urdf_loader=self.robot_loader,
             z0=np.hstack((self.q_0, self.qdot_0)),
@@ -39,6 +29,35 @@ class Simulator:
             Nsim=self.Nsim,
             wcv=self.wcv,
             integration_method="RK4"
+        )
+
+        if scene:
+            self.scene = robot_visualizer(self.robot_loader)
+            self.scene.add_surface_from_casadi(
+            self.surface.get_surface_function(),
+            x_limits=self.surface.get_limits()[0],
+            y_limits=self.surface.get_limits()[1],
+            resolution=80,
+            path="surfaces/quadratic_surface",
+            color=0x3399FF,
+            opacity=0.6,    
+            origin=surface_origin,            
+            orientation_rpy=surface_orientation_rpy,    
+            )
+            self.scene.add_triad(
+            position=self.simulation_model.ee_position(0),
+            orientation_rpy=self.simulation_model.ee_orientation(0),
+            path="frames/end_effector_frame",
+            scale=0.2,
+            line_width=2.0
+        )
+        else:
+            self.scene = None
+
+        self.surface = Surface(
+            position=surface_origin,
+            orientation_rpy=surface_orientation_rpy,
+            limits=surface_limits
         )
         self.prediction_model = prediction_robot_6dof(
             urdf_loader=self.robot_loader,
@@ -55,26 +74,6 @@ class Simulator:
             differential_kinematics=self.prediction_model.dk_casadi,
             N_horizon=self.prediction_horizon,
             Tf=self.dt*self.prediction_horizon
-        )
-        
-        self.scene.add_surface_from_casadi(
-            self.surface.get_surface_function(),
-            x_limits=self.surface.get_limits()[0],
-            y_limits=self.surface.get_limits()[1],
-            resolution=80,
-            path="surfaces/quadratic_surface",
-            color=0x3399FF,
-            opacity=0.6,    
-            origin=surface_origin,            
-            orientation_rpy=surface_orientation_rpy,    
-        )
-
-        self.scene.add_triad(
-            position=self.simulation_model.ee_position(0),
-            orientation_rpy=self.simulation_model.ee_orientation(0),
-            path="frames/end_effector_frame",
-            scale=0.2,
-            line_width=2.0
         )
 
     def run(self):
@@ -103,7 +102,17 @@ class Simulator:
                 })
 
                 self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
-    
+
+    def get_results(self):
+        data = {
+            'time': np.arange(0, self.simulation_model.z.shape[1]),
+            'q': self.simulation_model.z[:6,:],
+            'qdot': self.simulation_model.z[6:,:],
+            'u': self.simulation_model.u,
+            'ee_pose': self.simulation_model._ee_pose_log
+        }
+        return data
+
 if __name__ == "__main__":
     sim0 = Simulator(
         dt=0.001,
@@ -117,6 +126,18 @@ if __name__ == "__main__":
         wcv=np.array([5,5,5,5,5,5]),
         scene=True
     )
+    sim0.mpc.px_ref = 0.25
+    sim0.mpc.vy_ref = 0.7
+    sim0.mpc.w_u = 1e-9
+    sim0.mpc.w1 = 25.0
+    sim0.mpc.w2 = 5.0
+    sim0.mpc.w3 = 5.0
+    sim0.mpc.w4 = 5.0
+    sim0.mpc.w5 = 1.0
+    sim0.mpc.w_u = 1e-9
+    sim0.mpc.q_dot_ref_bound = 1.0
+    # sim0.mpc.q_dot_dot_bound = 1.0
+
     sim0.run()
     # sim0_solver = sim0.opc_solver.stats
     # sim0_simulation_results = sim0.simulation_model.stats
