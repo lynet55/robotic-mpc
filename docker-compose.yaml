@@ -1,0 +1,13 @@
+services:
+  robotic-mpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/root/robotic-mpc/src
+    environment:
+      - LD_LIBRARY_PATH=/root/robotic-mpc/acados/lib
+      - ACADOS_SOURCE_DIR=/root/robotic-mpc/acados
+    working_dir: /root/robotic-mpc/src
+    stdin_open: true
+    tty: true
