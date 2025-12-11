@@ -5,11 +5,17 @@ from simulation_model import Robot as simulation_robot_6dof
 from trajectory_optimizer import MPC as model_predictive_control
 from surface import Surface
 import numpy as np
+import time
 
 class Simulator:
     def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv, scene=True):
         self.dt = dt
+        self.simulation_time = simulation_time
         self.Nsim = int(simulation_time/dt)  # Total number of simulation steps
+
+        self.mpc_time = np.zeros(self.Nsim)
+        self.integration_time = np.zeros(self.Nsim)
+        
         self.prediction_horizon = prediction_horizon  # Number of steps in MPC horizon
         self.surface_limits = surface_limits
         self.surface_origin = surface_origin
@@ -83,21 +89,30 @@ class Simulator:
 
     def run(self):
 
-        for t in range(self.Nsim):
+        for i in range(self.Nsim):
+            start_time = time.time()
             #MPC input and refferences
-            current_state = self.simulation_model.state(t)        
+            current_state = self.simulation_model.state(i)        
+
+            mpc_start_time = time.time()
             self.mpc.solver.set(0, 'lbx', current_state)
             self.mpc.solver.set(0, 'ubx', current_state)
             self.mpc.solver.solve()
             u = self.mpc.solver.get(0, "u")
+            mpc_time = time.time() - mpc_start_time
+            self.mpc_time[i] = mpc_time
 
             #Integration Step
-            self.simulation_model.update(current_state, u, t)
+            integration_start_time = time.time()
+            self.simulation_model.update(current_state, u, i)
+            integration_time = time.time() - integration_start_time
+            print(f"Integration time: {integration_time} s")
+            self.integration_time[i] = integration_time
 
             #Visual Update
-            if t % 100 == 0:
-                q1, q2, q3, q4, q5, q6 = self.simulation_model.joint_angles(t+1)
-                ee_pos = self.simulation_model.ee_position(t+1)
+            if i % 10 == 0:
+                q1, q2, q3, q4, q5, q6 = self.simulation_model.joint_angles(i+1)
+                ee_pos = self.simulation_model.ee_position(i+1)
                 
                 self.scene.set_joint_angles({
                     "shoulder_pan_joint": q1,
@@ -111,8 +126,13 @@ class Simulator:
                 self.traj_points.append(ee_pos.copy())
                 self.traj_array = np.vstack(self.traj_points)
 
-                self.scene.update_triad("frames/end_effector_frame", position=ee_pos, orientation_rpy=self.simulation_model.ee_orientation(t+1))
+                self.scene.update_triad("frames/end_effector_frame", position=ee_pos, orientation_rpy=self.simulation_model.ee_orientation(i+1))
                 self.scene.update_line(path="lines/ee_trajectory", points=self.traj_array)
+                print(f"Running time: {self.dt*i} s of {self.simulation_time} s")
+            
+            #realtime assurance
+            time_spent = time.time() - start_time
+            if time_spent < self.dt: time.sleep(self.dt - time_spent)
 
     def get_results(self):
         data = {
@@ -124,11 +144,12 @@ class Simulator:
         }
         return data
 
+    
 if __name__ == "__main__":
     sim0 = Simulator(
         dt=0.001,
         prediction_horizon=200,
-        simulation_time=4000,
+        simulation_time=4,
         surface_limits=((-2, 2), (-2, 2)),
         surface_origin=np.array([0.0, 0.0, 0.0]),
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
@@ -149,5 +170,3 @@ if __name__ == "__main__":
 
     sim0.run()
     results = sim0.get_results()
-    print(results)
-    print(results['ee_pose'])
