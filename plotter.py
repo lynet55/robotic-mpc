@@ -11,31 +11,29 @@ class Plotter:
             "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"
         ]
 
-    def joint_angles(self, q: np.ndarray, dt: float = 1.0, title: str = "Joint Angles"):
+    def joint_angles(self, t: np.ndarray, q: np.ndarray, title: str = "Joint Angles"):
         """
         Plot joint angles over time as stacked subplots.
         
         Args:
-            q: Array of shape (n_joints, N) containing joint angles
-            dt: Time step for x-axis scaling
+            t: Array of shape (N,) containing time
+            q: Array of shape (q.shape[0], N) containing joint angles
             title: Plot title
         """
-        n_joints, N = q.shape
-        t = np.arange(N) * dt
 
         fig = make_subplots(
-            rows=n_joints, cols=1,
+            rows=q.shape[0], cols=1,
             shared_xaxes=True,
             vertical_spacing=0.02,
-            subplot_titles=[f"$q_{{{i+1}}}$" for i in range(n_joints)]
+            subplot_titles=[f"$q_{{{i+1}}}$" for i in range(q.shape[0])]
         )
 
-        for i in range(n_joints):
+        for i in range(q.shape[0]):
             fig.add_trace(
                 go.Scatter(
                     x=t,
                     y=q[i, :],
-                    mode="lines",
+                    mode="lines+markers",
                     line=dict(color=self.colors[i % len(self.colors)], width=1.5),
                     name=f"$q_{{{i+1}}}$"
                 ),
@@ -43,11 +41,11 @@ class Plotter:
             )
             fig.update_yaxes(title_text=f"$q_{{{i+1}}}$ [rad]", row=i + 1, col=1)
 
-        fig.update_xaxes(title_text="$t$ [s]", row=n_joints, col=1)
+        fig.update_xaxes(title_text="$t$ [s]", row=q.shape[0], col=1)
         fig.update_layout(
             title=dict(text=title, font=dict(size=16)),
             template=self.template,
-            height=200 * n_joints,
+            height=200 * q.shape[0],
             showlegend=False
         )
 
@@ -55,37 +53,37 @@ class Plotter:
 
     def generic_plot(
         self,
-        *series: np.ndarray,
-        dt: float = 1.0,
-        xlabel: str = "$t$",
+        x: np.ndarray,
+        *y_series: np.ndarray,
+        xlabel: str = "$x$",
         ylabel: str = "$y$",
         title: str = "Plot",
         labels: list = None,
     ):
         """
-        Generic line plot for one or more 1D time series.
+        Generic line plot for one or more 1D series against a common x-axis.
         
         Args:
-            *series: One or more 1D arrays (1, N) or (N,)
-            dt: Time step for x-axis scaling
+            x: 1D array for x-axis values
+            *y_series: One or more 1D arrays (1, N) or (N,) for y-axis
             xlabel: X-axis label (supports LaTeX with $...$)
             ylabel: Y-axis label (supports LaTeX with $...$)
             title: Plot title
             labels: List of labels for each series (supports LaTeX with $...$)
         """
         fig = go.Figure()
+        x = np.atleast_1d(np.squeeze(x))
 
-        for i, s in enumerate(series):
-            s = np.atleast_1d(np.squeeze(s))
-            t = np.arange(len(s)) * dt
+        for i, y in enumerate(y_series):
+            y = np.atleast_1d(np.squeeze(y))
             
             label = labels[i] if labels and i < len(labels) else f"$S_{{{i+1}}}$"
             color = self.colors[i % len(self.colors)]
 
             fig.add_trace(
                 go.Scatter(
-                    x=t,
-                    y=s,
+                    x=x,
+                    y=y,
                     mode="lines",
                     line=dict(color=color, width=1.5),
                     name=label
@@ -106,17 +104,3 @@ class Plotter:
 
     def show(self, fig: go.Figure):
         fig.show()
-
-    def save(self, fig: go.Figure, filename: str, scale: int = 2):
-        """
-        Save figure to file. Supports png, jpg, svg, pdf, html.
-        
-        Args:
-            fig: Plotly figure
-            filename: Output filename with extension
-            scale: Scale factor for image resolution (ignored for html)
-        """
-        if filename.endswith(".html"):
-            fig.write_html(filename, include_mathjax="cdn")
-        else:
-            fig.write_image(filename, scale=scale)

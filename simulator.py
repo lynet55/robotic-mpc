@@ -107,7 +107,6 @@ class Simulator:
             integration_start_time = time.time()
             self.simulation_model.update(current_state, u, i)
             integration_time = time.time() - integration_start_time
-            print(f"Integration time: {integration_time} s")
             self.integration_time[i] = integration_time
 
             #Visual Update
@@ -150,7 +149,7 @@ if __name__ == "__main__":
     sim0 = Simulator(
         dt=0.001,
         prediction_horizon=200,
-        simulation_time=2,
+        simulation_time=1,
         surface_limits=((-2, 2), (-2, 2)),
         surface_origin=np.array([0.0, 0.0, 0.0]),
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
@@ -160,17 +159,4 @@ if __name__ == "__main__":
         scene=True
     )
     sim0.run()
-    results = sim0.get_results()
-    plotter = Plotter()
-    fig_joints = plotter.joint_angles(results['q'], dt=sim0.dt, title="Joint Angles")
-    fig_timing = plotter.generic_plot(
-        sim0.mpc_time,
-        sim0.integration_time,
-        dt=sim0.dt,
-        xlabel="Time [s]",
-        ylabel="Computation Time [s]",
-        title="Timing Performance",
-        labels=["MPC", "Integration"],
-    )
-    plotter.show(fig_joints)
-    plotter.show(fig_timing)
+    sim0_results = sim0.get_results()
