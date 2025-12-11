@@ -4,6 +4,7 @@ from prediction_model import SixDofRobot as prediction_robot_6dof
 from simulation_model import Robot as simulation_robot_6dof
 from trajectory_optimizer import MPC as model_predictive_control
 from surface import Surface
+from plotter import Plotter
 import numpy as np
 import time
 
@@ -149,7 +150,7 @@ if __name__ == "__main__":
     sim0 = Simulator(
         dt=0.001,
         prediction_horizon=200,
-        simulation_time=4,
+        simulation_time=2,
         surface_limits=((-2, 2), (-2, 2)),
         surface_origin=np.array([0.0, 0.0, 0.0]),
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
@@ -158,15 +159,18 @@ if __name__ == "__main__":
         wcv=np.array([5,10,15,20,25,35]),
         scene=True
     )
-
-    #paper weights
-    # sim0.mpc.w_origin_task = 200.0
-    # sim0.mpc.w_normal_alignment_task = 50.0
-    # sim0.mpc.w_x_alignment_task = 300.0
-    # sim0.mpc.w_fixed_x_task = 200.0
-    # sim0.mpc.w_fixed_vy_task = 100.0
-    # sim0.mpc.w_u = 0.01
-
-
     sim0.run()
     results = sim0.get_results()
+    plotter = Plotter()
+    fig_joints = plotter.joint_angles(results['q'], dt=sim0.dt, title="Joint Angles")
+    fig_timing = plotter.generic_plot(
+        sim0.mpc_time,
+        sim0.integration_time,
+        dt=sim0.dt,
+        xlabel="Time [s]",
+        ylabel="Computation Time [s]",
+        title="Timing Performance",
+        labels=["MPC", "Integration"],
+    )
+    plotter.show(fig_joints)
+    plotter.show(fig_timing)
