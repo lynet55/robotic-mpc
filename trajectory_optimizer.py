@@ -31,7 +31,16 @@ class MPC:
         self.px_ref = px_ref
         self.vy_ref = vy_ref
 
-        
+        # Task errors weights
+        self.w_origin_task = 200.0 
+        self.w_normal_alignment_task = 50.0     
+        self.w_x_alignment_task = 300.0
+        self.w_fixed_x_task = 200.0  
+        self.w_fixed_vy_task = 100.0
+
+        # Control effort weight
+        self.w_u = 0.01
+
         # Create ocp object to formulate the OCP
         self.ocp = AcadosOcp()
 
@@ -105,24 +114,14 @@ class MPC:
 
         g = ca.vertcat(g1, g2, g3, g4, g5)
         
-        # Task errors weights
-        w_origin_task = 200.0 
-        w_normal_alignment_task = 50.0     
-        w_x_alignment_task = 300.0
-        w_fixed_x_task = 200.0  
-        w_fixed_vy_task = 100.0
-
-        # Control effort weight
-        w_u = 0.01
-
         # Weights diagonal matrices
-        Q = np.array([ w_origin_task,     
-                       w_normal_alignment_task,        
-                       w_x_alignment_task,            
-                       w_fixed_x_task,       
-                       w_fixed_vy_task      
+        Q = np.array([ self.w_origin_task,     
+                       self.w_normal_alignment_task,        
+                       self.w_x_alignment_task,            
+                       self.w_fixed_x_task,       
+                       self.w_fixed_vy_task      
                     ])
-        R = 2 * np.array([w_u, w_u, w_u, w_u, w_u, w_u])
+        R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
         W = np.diag(np.concatenate([Q, R]))
 
@@ -144,22 +143,4 @@ class MPC:
 
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
-
         self.solver = AcadosOcpSolver(self.ocp, json_file='acados_ocp.json')
-
-    
-
-
-
-'''
-    def setup_integrator(self, dt):
-        sim = AcadosSim()
-        sim.model = self.acados_model
-
-        sim.solver_options.T = dt # simulation time
-        sim.solver_options.num_steps = 2 # Make extra integrator more precise than ocp-internal integrator
-        sim.code_export_directory = 'c_generated_code_sim'
-        acados_integrator = AcadosSimSolver(sim)
-        return acados_integrator
-'''
-    
