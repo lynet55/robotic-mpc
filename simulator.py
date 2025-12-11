@@ -109,20 +109,27 @@ class Simulator:
                 "wrist_3_joint": q6
                 })
 
-            
             self.traj_points.append(self.simulation_model.ee_position(t+1).copy())
             self.traj_array = np.vstack(self.traj_points)
 
             self.scene.update_triad("frames/end_effector_frame", position=self.simulation_model.ee_position(t+1), orientation_rpy=self.simulation_model.ee_orientation(t+1))
-            self.scene.update_line(path="lines/ee_trajectory",points=self.traj_array,)
+            self.scene.update_line(path="lines/ee_trajectory",points=self.traj_array)
 
-
+    def get_results(self):
+        data = {
+            'time': np.arange(0, self.simulation_model.z.shape[1]),
+            'q': self.simulation_model.z[:6,:],
+            'qdot': self.simulation_model.z[6:,:],
+            'u': self.simulation_model.u,
+            'ee_pose': self.simulation_model._ee_pose_log
+        }
+        return data
 
 if __name__ == "__main__":
     sim0 = Simulator(
-        dt=0.001,
+        dt=0.01,
         prediction_horizon=200,
-        simulation_time=4000,
+        simulation_time=1,
         surface_limits=((-2, 2), (-2, 2)),
         surface_origin=np.array([0.0, 0.0, 0.0]),
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
@@ -132,6 +139,6 @@ if __name__ == "__main__":
         scene=True
     )
     sim0.run()
-    # sim0_solver = sim0.opc_solver.stats
-    # sim0_simulation_results = sim0.simulation_model.stats
-    # print(sim0.benchmark)
+    results = sim0.get_results()
+    print(results)
+    print(results['ee_pose'])
