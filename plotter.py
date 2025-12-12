@@ -4,7 +4,7 @@ from plotly.subplots import make_subplots
 
 
 class Plotter:
-    def __init__(self, template: str = "plotly_dark"):
+    def __init__(self, template: str = "ggplot2"):
         self.template = template
         self.colors = [
             "#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A",
@@ -59,6 +59,8 @@ class Plotter:
         ylabel: str = "$y$",
         title: str = "Plot",
         labels: list = None,
+        xlog: bool = False,
+        ylog: bool = False,
     ):
         """
         Generic line plot for one or more 1D series against a common x-axis.
@@ -70,6 +72,8 @@ class Plotter:
             ylabel: Y-axis label (supports LaTeX with $...$)
             title: Plot title
             labels: List of labels for each series (supports LaTeX with $...$)
+            xlog: Use logarithmic scale for x-axis
+            ylog: Use logarithmic scale for y-axis
         """
         fig = go.Figure()
         x = np.atleast_1d(np.squeeze(x))
@@ -92,8 +96,14 @@ class Plotter:
 
         fig.update_layout(
             title=dict(text=title, font=dict(size=16)),
-            xaxis_title=xlabel,
-            yaxis_title=ylabel,
+            xaxis=dict(
+                title=dict(text=xlabel),
+                type="log" if xlog else None,
+            ),
+            yaxis=dict(
+                title=dict(text=ylabel),
+                type="log" if ylog else None,
+            ),
             template=self.template,
             height=500,
             width=1000,

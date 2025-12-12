@@ -1,5 +1,6 @@
 import casadi as ca
 import numpy as np
+import uuid
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosSim
 
 class MPC:
@@ -31,6 +32,9 @@ class MPC:
         self.px_ref = px_ref
         self.vy_ref = vy_ref
 
+        # Generate unique identifier for this MPC instance to avoid acados caching issues
+        self._instance_id = uuid.uuid4().hex[:8]
+
         # Task errors weights
         self.w_origin_task = 200.0 
         self.w_normal_alignment_task = 50.0     
@@ -52,7 +56,8 @@ class MPC:
 
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
-        self.ocp.code_export_directory = 'c_generated_code_ocp'
+        # Use unique directory per instance to prevent caching conflicts
+        self.ocp.code_export_directory = f'c_generated_code_ocp_{self._instance_id}'
 
         self.ocp.solver_options.integrator_type = 'ERK'
         self.ocp.solver_options.sim_method_num_stages = 4
@@ -66,7 +71,8 @@ class MPC:
         self.acados_model = model.acados_model
         self.y = model.y
         self.ocp.model =self.acados_model
-        self.ocp.model.name = 'six_dof_robot_model'
+        # Use unique model name per instance to prevent acados from reusing cached solver
+        self.ocp.model.name = f'six_dof_robot_{self._instance_id}'
 
         self.nx = self.acados_model.x.rows()
         self.nu = self.acados_model.u.rows()
@@ -143,4 +149,5 @@ class MPC:
 
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
-        self.solver = AcadosOcpSolver(self.ocp, json_file='acados_ocp.json')
+        # Use unique JSON file per instance
+        self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados_ocp_{self._instance_id}.json')

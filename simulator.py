@@ -16,6 +16,12 @@ class Simulator:
 
         self.mpc_time = np.zeros(self.Nsim)
         self.integration_time = np.zeros(self.Nsim)
+
+        self.sqp_iter = np.zeros(self.Nsim, dtype=int)  # SQP iterations per solve
+        self.solver_status = np.zeros(self.Nsim, dtype=int)  # Solver return status
+        self.residuals = np.zeros((self.Nsim, 4))  # [res_stat, res_eq, res_ineq, res_comp] per solve
+        self.solver_time_tot = np.zeros(self.Nsim)  # Total solver time from acados
+        self.cost_history = np.zeros(self.Nsim)  # Cost history per solve
         
         self.prediction_horizon = prediction_horizon  # Number of steps in MPC horizon
         self.surface_limits = surface_limits
@@ -98,11 +104,17 @@ class Simulator:
             mpc_start_time = time.time()
             self.mpc.solver.set(0, 'lbx', current_state)
             self.mpc.solver.set(0, 'ubx', current_state)
-            self.mpc.solver.solve()
+            status = self.mpc.solver.solve()
             u = self.mpc.solver.get(0, "u")
             mpc_time = time.time() - mpc_start_time
             self.mpc_time[i] = mpc_time
-
+            
+            # Collect acados solver statistics
+            self.solver_status[i] = status
+            self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter')
+            self.residuals[i, :] = self.mpc.solver.get_residuals()
+            self.solver_time_tot[i] = self.mpc.solver.get_stats('time_tot')
+            self.cost_history[i] = self.mpc.solver.get_cost()
             #Integration Step
             integration_start_time = time.time()
             self.simulation_model.update(current_state, u, i)
@@ -140,7 +152,16 @@ class Simulator:
             'q': self.simulation_model.z[:6,:],
             'qdot': self.simulation_model.z[6:,:],
             'u': self.simulation_model.u,
-            'ee_pose': self.simulation_model._ee_pose_log
+            'ee_pose': self.simulation_model._ee_pose_log,
+            # Timing data
+            'mpc_time': self.mpc_time,
+            'integration_time': self.integration_time,
+            'cost_history': self.cost_history,
+            # Acados solver statistics (per MPC solve)
+            'sqp_iter': self.sqp_iter,
+            'solver_status': self.solver_status,
+            'solver_time_tot': self.solver_time_tot,
+            'residuals': self.residuals,  # Shape: (Nsim, 4) - [res_stat, res_eq, res_ineq, res_comp]
         }
         return data
 
