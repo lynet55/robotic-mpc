@@ -49,6 +49,8 @@ class SixDofRobot:
         # Define the dynamics as an ODE
         self.acados_model, self.y = self._generate_dynamics_model()
 
+    
+
     def _setup_casadi_functions(self):
         """Setup pure CasADi functions for Pinocchio operations"""
         # Create symbolic variables for Pinocchio functions
