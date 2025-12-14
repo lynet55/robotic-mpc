@@ -811,18 +811,18 @@ void six_dof_robot_model_acados_setup_nlp_in(six_dof_robot_model_solver_capsule*
     double* lubu = calloc(2*NBU, sizeof(double));
     double* lbu = lubu;
     double* ubu = lubu + NBU;
-    lbu[0] = -500;
-    ubu[0] = 500;
-    lbu[1] = -500;
-    ubu[1] = 500;
-    lbu[2] = -500;
-    ubu[2] = 500;
-    lbu[3] = -500;
-    ubu[3] = 500;
-    lbu[4] = -500;
-    ubu[4] = 500;
-    lbu[5] = -500;
-    ubu[5] = 500;
+    lbu[0] = -3.141592653589793;
+    ubu[0] = 3.141592653589793;
+    lbu[1] = -3.141592653589793;
+    ubu[1] = 3.141592653589793;
+    lbu[2] = -3.141592653589793;
+    ubu[2] = 3.141592653589793;
+    lbu[3] = -3.141592653589793;
+    ubu[3] = 3.141592653589793;
+    lbu[4] = -3.141592653589793;
+    ubu[4] = 3.141592653589793;
+    lbu[5] = -3.141592653589793;
+    ubu[5] = 3.141592653589793;
 
     for (int i = 0; i < N; i++)
     {

@@ -10,7 +10,8 @@ class Surface:
 
         self.x = ca.SX.sym("x")
         self.y = ca.SX.sym("y")
-        a, b, c, d, e, f = -0.1, 0.1, -0.01, 0.01, 0.01, 0.0
+        #a, b, c, d, e, f = -0.1, 0.1, -0.01, 0.01, 0.01, 0.0
+        a, b, c, d, e, f = 0.2, 0.2, -0.01, -1.2, 0.01, 0.0
         self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
 
         '''
