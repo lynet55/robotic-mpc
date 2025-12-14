@@ -128,7 +128,7 @@ if __name__ == "__main__":
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
         qdot_0=np.array([2,2,2,2,2,2]),
         q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-        wcv=np.array([5,10,15,20,25,35]),
+        wcv=np.array([228.9,262.09,517.3,747.44,429.9,1547.76]),
         scene=True
     )
     sim0.run()
