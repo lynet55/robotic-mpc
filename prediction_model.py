@@ -2,11 +2,12 @@ import numpy as np
 import casadi as ca
 import pinocchio as pin
 import pinocchio.casadi as cpin
+import time
 from acados_template import AcadosModel
 
 
 class SixDofRobot:
-    def __init__(self, urdf_loader, Wcv=None, translation_ee_t=[0,0,0]):
+    def __init__(self, urdf_loader, Ts, Wcv=None, translation_ee_t=[0,0,0]):
         # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
         self._data = urdf_loader.data
@@ -39,6 +40,8 @@ class SixDofRobot:
             Wcv = np.ones(self.n_dof)  # Default parameters
         self._Wcv = Wcv
         
+        self._Ts = Ts
+
         # Define CasADi symbolic variables
         self.state = ca.SX.sym('x', 2 * self.n_dof)  # [q, q_dot]
         self.input = ca.SX.sym('u', self.n_dof)    # control input (velocity commands)
@@ -47,7 +50,27 @@ class SixDofRobot:
         self._setup_casadi_functions()
         
         # Define the dynamics as an ODE
+        #self.acados_model, self.y = self._generate_dynamics_model()
+
+        self._Ad = None   
+        self._Bd = None  
+        self._update_discrete_lti_matrices()
+
         self.acados_model, self.y = self._generate_dynamics_model()
+
+    @property
+    def Ad(self):
+        if self._Ad is None:
+            raise RuntimeError("Ad not initialized")
+        return self._Ad
+
+    @property
+    def Bd(self):
+        if self._Bd is None:
+            raise RuntimeError("Bd not initialized")
+        return self._Bd
+
+
 
     def _setup_casadi_functions(self):
         """Setup pure CasADi functions for Pinocchio operations"""
@@ -236,6 +259,66 @@ class SixDofRobot:
 
         return p_t, R_w_t_flat
 
+    def lti_discrete_simulation(self):
+        start = time.perf_counter()
+    
+
+        z = np.zeros((12, self._N), dtype=np.float64)
+        u = np.zeros((6,  self._N), dtype=np.float64)
+
+        z[:, 0] = self._z0
+        u[:, 0] = self._u_step
+
+        for k in range(0, self._N - 1):
+            z[:, k+1] = self._Ad @ z[:, k] + self._Bd @ u[:, k]
+            u[:, k+1] = u[:, k] if (k + 1) < self._Nu else np.zeros((6,), dtype=np.float64)
+
+        end = time.perf_counter()
+        print(f"Elapsed time for exact discrete LTI simulation: {(end - start)*1e3:.3f} ms")
+        return z, u
+
+
+    def _generate_dynamics_model(self) -> AcadosModel:
+        """
+        Create the ODE representation: dx/dt = f(x, u)
+        
+        Dynamics model:
+        dq/dt = q_dot (integrator for the position)
+        dq_dot/dt = -diag(th) @ q_dot + diag(th) @ u
+        
+        This is a first-order, decoupled, speed closed-loop model of the robot.
+        """
+        # States
+        q = self.state[:self.n_dof]
+        q_dot = self.state[self.n_dof:]
+
+        # Output 
+        pose_ee_rot  = self.fk_casadi_rot(q)  
+        vee = self.dk_casadi(q, q_dot)
+
+        p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
+        y = ca.vertcat(p_task, R_task, vee)
+
+        # Dynamics
+        x_k = ca.vertcat(q, q_dot)
+        Ad = ca.DM(self._Ad)
+        Bd = ca.DM(self._Bd)
+        disc_dyn_expr = Ad @ x_k + Bd @ self.input 
+
+        model = AcadosModel()
+
+        model.disc_dyn_expr = disc_dyn_expr
+        model.x = self.state
+        model.u = self.input 
+
+        model.x_labels = [r'$q1$ [rad]', r'$\dot{q1}$ [rad/s]', r'$q2$ [rad]', r'$\dot{q2}$ [rad/s]', r'$q3$ [rad]', r'$\dot{q3}$ [rad/s]',
+                          r'$q4$ [rad]', r'$\dot{q4}$ [rad/s]', r'$q5$ [rad]', r'$\dot{q5}$ [rad/s]', r'$q6$ [rad]', r'$\dot{q6}$ [rad/s]']
+        model.u_labels = [r'$\dot{q1_ref}$ [rad/s]', r'$\dot{q2_ref}$ [rad/s]', r'$\dot{q3_ref}$ [rad/s]', r'$\dot{q4_ref}$ [rad/s]',
+                          r'$\dot{q5_ref}$ [rad/s]', r'$\dot{q6_ref}$ [rad/s]']
+        model.t_label = '$t$ [s]'
+
+        return model, y
+    '''
     def _generate_dynamics_model(self) -> AcadosModel:
         """
         Create the ODE representation: dx/dt = f(x, u)
@@ -282,7 +365,7 @@ class SixDofRobot:
         model.t_label = '$t$ [s]'
 
         return model, y
-    
+    '''
     def forward_kinematics_euler(self, q):
         """
         Compute forward kinematics for given joint positions (Euler angles version)

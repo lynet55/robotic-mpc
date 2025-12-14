@@ -52,6 +52,7 @@ class Simulator:
         )
         self.prediction_model = prediction_robot_6dof(
             urdf_loader=self.robot_loader,
+            Ts=self.dt,
             Wcv=self.wcv
         )
 
@@ -170,7 +171,7 @@ if __name__ == "__main__":
     sim0 = Simulator(
         dt=0.001,
         prediction_horizon=200,
-        simulation_time=1,
+        simulation_time=30,
         surface_limits=((-2, 2), (-2, 2)),
         surface_origin=np.array([0.0, 0.0, 0.0]),
         surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),

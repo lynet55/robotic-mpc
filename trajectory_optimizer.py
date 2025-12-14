@@ -59,7 +59,7 @@ class MPC:
         # Use unique directory per instance to prevent caching conflicts
         self.ocp.code_export_directory = f'c_generated_code_ocp_{self._instance_id}'
 
-        self.ocp.solver_options.integrator_type = 'ERK'
+        self.ocp.solver_options.integrator_type = 'DISCRETE'
         self.ocp.solver_options.sim_method_num_stages = 4
         self.ocp.solver_options.sim_method_num_steps = 1
 
@@ -140,7 +140,7 @@ class MPC:
         self.ocp.cost.W = W
 
         # Control input bounds (joint velocity commands)
-        q_dot_ref_max = 500.0  # Maximum joint velocity command
+        q_dot_ref_max = np.pi  # Maximum joint velocity command
 
         # Control input bounds (joint velocity commands)
         self.ocp.constraints.lbu = np.array([-q_dot_ref_max] * 6)
