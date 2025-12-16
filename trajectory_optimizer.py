@@ -57,7 +57,7 @@ class MPC:
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         # Use unique directory per instance to prevent caching conflicts
-        self.ocp.code_export_directory = f'c_generated_code_ocp_{self._instance_id}'
+        self.ocp.code_export_directory = f'acados-c-generated/c_generated_code_ocp_{self._instance_id}'
 
         self.ocp.solver_options.integrator_type = 'ERK'
         self.ocp.solver_options.sim_method_num_stages = 4
@@ -150,4 +150,4 @@ class MPC:
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
         # Use unique JSON file per instance
-        self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados_ocp_{self._instance_id}.json')
+        self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados-ocp-json/acados_ocp_{self._instance_id}.json')
