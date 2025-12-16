@@ -6,7 +6,7 @@ from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosS
 class MPC:
     
     def __init__(self, surface, initial_state, model, N_horizon, Tf, 
-                 px_ref= 0.40, vy_ref=-0.40):
+                 px_ref= 0.40, vy_ref=-0.20):
         """
         Initialize MPC controller with explicit dependencies.
         

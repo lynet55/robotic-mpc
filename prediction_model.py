@@ -70,7 +70,34 @@ class SixDofRobot:
             raise RuntimeError("Bd not initialized")
         return self._Bd
 
+    def _update_discrete_lti_matrices(self,):
+       
+        w = self._Wcv 
+        Ts = self._Ts
 
+        a22 = np.exp(-w * Ts)             
+        a12 = (1.0 - a22) / w              
+
+        I6 = np.eye(6, dtype=np.float64)
+
+        A12 = np.diag(a12)               
+        A22 = np.diag(a22)                 
+
+        B2  = np.diag(1.0 - a22)           
+        B1  = Ts * I6 - A12              
+
+        Ad = np.zeros((12, 12), dtype=np.float64)
+        Bd = np.zeros((12,  6), dtype=np.float64)
+
+        Ad[0:6, 0:6]   = I6
+        Ad[0:6, 6:12]  = A12
+        Ad[6:12, 6:12] = A22
+
+        Bd[0:6, :]  = B1
+        Bd[6:12, :] = B2
+
+        self._Ad = Ad
+        self._Bd = Bd
 
     def _setup_casadi_functions(self):
         """Setup pure CasADi functions for Pinocchio operations"""
@@ -258,7 +285,7 @@ class SixDofRobot:
         )
 
         return p_t, R_w_t_flat
-
+    '''
     def lti_discrete_simulation(self):
         start = time.perf_counter()
     
@@ -276,7 +303,7 @@ class SixDofRobot:
         end = time.perf_counter()
         print(f"Elapsed time for exact discrete LTI simulation: {(end - start)*1e3:.3f} ms")
         return z, u
-
+    '''
 
     def _generate_dynamics_model(self) -> AcadosModel:
         """
