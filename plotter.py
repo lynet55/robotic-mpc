@@ -1,13 +1,13 @@
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
+from scipy import stats # For histogram bin calculation
 
 class Plotter:
     def __init__(self, template: str = "ggplot2"):
         self.template = template
 
-    def joint_angles(self, t: np.ndarray, q: np.ndarray, title: str = "Joint Angles"):
+    def joints(self, t: np.ndarray, q: np.ndarray, title: str = "Joint Angles", name : str = "q", unit: str = "rad"):
         """
         Plot joint angles over time as stacked subplots.
         
@@ -19,8 +19,7 @@ class Plotter:
         fig = make_subplots(
             rows=q.shape[0], cols=1,
             shared_xaxes=True,
-            vertical_spacing=0.02,
-            subplot_titles=[f"$q_{{{i+1}}}$" for i in range(q.shape[0])]
+            vertical_spacing=0.02
         )
 
         for i in range(q.shape[0]):
@@ -30,13 +29,13 @@ class Plotter:
                     y=q[i, :],
                     mode="lines",
                     line=dict(width=1.5),
-                    name=f"$q_{{{i+1}}}$"
+                    name=f"${name}_{{{i+1}}}$"
                 ),
                 row=i + 1, col=1
             )
-            fig.update_yaxes(title_text=f"$q_{{{i+1}}}$ [rad]", row=i + 1, col=1)
+            fig.update_yaxes(title_text=f"${name}_{{{i+1}}}$ [{unit}]", row=i + 1, col=1)
 
-        fig.update_xaxes(title_text="$t$ [s]", row=q.shape[0], col=1)
+        fig.update_xaxes(title_text="$t \\ [\\text{s}]$", row=q.shape[0], col=1)
         fig.update_layout(
             title=dict(text=title, font=dict(size=14)),
             template=self.template,
@@ -58,6 +57,7 @@ class Plotter:
         labels: list = None,
         xlog: bool = False,
         ylog: bool = False,
+        discrete: bool = False,
     ):
         """
         Generic line plot for one or more 1D series against a common x-axis.
@@ -71,40 +71,24 @@ class Plotter:
             labels: List of labels for each series
             xlog: Use logarithmic scale for x-axis
             ylog: Use logarithmic scale for y-axis
+            discrete: If True, use 'hv' line shape (for step/discrete data like iterations)
         """
         fig = go.Figure()
         x = np.atleast_1d(np.squeeze(x))
         
-        # Color palette
-        colors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880']
+        line_shape = 'hv' if discrete else 'linear'
 
         for i, y in enumerate(y_series):
             y = np.atleast_1d(np.squeeze(y))
             label = labels[i] if labels and i < len(labels) else f"$S_{{{i+1}}}$"
-            color = colors[i % len(colors)]
-
-            # Line trace (hidden from legend)
+            
             fig.add_trace(
                 go.Scatter(
                     x=x,
                     y=y,
                     mode="lines",
-                    line=dict(width=1.5, color=color),
+                    line=dict(width=1.5, shape=line_shape),
                     name=label,
-                    legendgroup=label,
-                    showlegend=False,
-                )
-            )
-            # Marker trace for dot legend (toggles with line)
-            fig.add_trace(
-                go.Scatter(
-                    x=[None],
-                    y=[None],
-                    mode="markers",
-                    marker=dict(size=8, color=color),
-                    name=label,
-                    legendgroup=label,
-                    showlegend=True,
                 )
             )
 
@@ -130,7 +114,6 @@ class Plotter:
                 x=1.02,
                 font=dict(size=10),
                 bgcolor="rgba(255,255,255,0.8)",
-                groupclick="toggleitem"
             )
         )
 
@@ -146,13 +129,6 @@ class Plotter:
     ):
         """
         Generate HTML report with Video, Task Performance, and Solver Performance sections.
-        
-        Args:
-            task_figs: List of plotly figures for Task Performance section
-            solver_figs: List of plotly figures for Solver Performance section
-            video_folder: Path to folder containing .mp4 video files
-            title: Page title
-            filename: Output HTML file path
         """
         import plotly.io as pio
         import os
@@ -167,11 +143,11 @@ class Plotter:
             video_files = sorted([f for f in os.listdir(video_folder) if f.lower().endswith('.mp4')])
             if video_files:
                 video_cells = []
-            for video_file in video_files:
-                video_path = os.path.abspath(os.path.join(video_folder, video_file))
-                video_name = os.path.splitext(video_file)[0]
-                video_html = f'''<h4>{video_name}</h4><video controls loop muted playsinline><source src="file://{video_path}" type="video/mp4"></video>'''
-                video_cells.append(f'<div class="cell">{video_html}</div>')
+                for video_file in video_files:
+                    video_path = os.path.abspath(os.path.join(video_folder, video_file))
+                    video_name = os.path.splitext(video_file)[0]
+                    video_html = f'''<h4>{video_name}</h4><video controls loop muted playsinline><source src="file://{video_path}" type="video/mp4"></video>'''
+                    video_cells.append(f'<div class="cell">{video_html}</div>')
                 
                 sections_html.append(f'''
                 <section>
