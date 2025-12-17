@@ -2,13 +2,12 @@ import numpy as np
 import casadi as ca
 import pinocchio as pin
 import pinocchio.casadi as cpin
-import time
 from acados_template import AcadosModel
 
 
 class SixDofRobot:
-    def __init__(self, urdf_loader, Ts, Wcv=None, translation_ee_t=[0,0,0]):
-        # Numeric Pinocchio model (for loading URDF and reference)
+    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0]):
+        # Numeric Pinocchio model (for loading URDF and reference) |Deprecable?|
         self._model = urdf_loader.model
         self._data = urdf_loader.data
         
@@ -17,7 +16,7 @@ class SixDofRobot:
         self._cdata = self._cmodel.createData()
         
         # Get the number of degrees of freedom
-        self.n_dof = self._model.nq
+        self._n_dof = self._model.nq
 
         if isinstance(translation_ee_t, (list, np.ndarray)):
             self.translation = ca.vertcat(translation_ee_t[0], 
@@ -37,14 +36,15 @@ class SixDofRobot:
         
         # Speed loop bandwidths (diagonal matrix)
         if Wcv is None:
-            Wcv = np.ones(self.n_dof)  # Default parameters
+            Wcv = np.ones(self._n_dof)
+            print("Wcv not specified: default parameters used [1,...,1]")  
         self._Wcv = Wcv
         
         self._Ts = Ts
 
         # Define CasADi symbolic variables
-        self.state = ca.SX.sym('x', 2 * self.n_dof)  # [q, q_dot]
-        self.input = ca.SX.sym('u', self.n_dof)    # control input (velocity commands)
+        self.state = ca.SX.sym('x', 2 * self._n_dof)  # [q, q_dot]
+        self.input = ca.SX.sym('u', self._n_dof)    # control input (velocity commands)
         
         # Create CasADi functions for Pinocchio operations
         self._setup_casadi_functions()
@@ -69,6 +69,18 @@ class SixDofRobot:
         if self._Bd is None:
             raise RuntimeError("Bd not initialized")
         return self._Bd
+
+    @property
+    def Ts(self):
+        return self._Ts
+    
+    @Ts.setter
+    def Ts(self, new_Ts):
+        if new_Ts <= 0:
+            raise ValueError("The sampling time must be positive")
+        if not isinstance(new_Ts, float):
+            raise TypeError(f"Expected type float, got {type(new_Ts).__name__}.")
+        self._Ts = new_Ts
 
     def _update_discrete_lti_matrices(self,):
        
@@ -102,8 +114,8 @@ class SixDofRobot:
     def _setup_casadi_functions(self):
         """Setup pure CasADi functions for Pinocchio operations"""
         # Create symbolic variables for Pinocchio functions
-        q_sym = ca.SX.sym('q', self.n_dof)
-        q_dot_sym = ca.SX.sym('q_dot', self.n_dof)
+        q_sym = ca.SX.sym('q', self._n_dof)
+        q_dot_sym = ca.SX.sym('q_dot', self._n_dof)
         
         # Forward kinematics using CasADi Pinocchio (also updates joint placements)
         
@@ -285,25 +297,7 @@ class SixDofRobot:
         )
 
         return p_t, R_w_t_flat
-    '''
-    def lti_discrete_simulation(self):
-        start = time.perf_counter()
-    
 
-        z = np.zeros((12, self._N), dtype=np.float64)
-        u = np.zeros((6,  self._N), dtype=np.float64)
-
-        z[:, 0] = self._z0
-        u[:, 0] = self._u_step
-
-        for k in range(0, self._N - 1):
-            z[:, k+1] = self._Ad @ z[:, k] + self._Bd @ u[:, k]
-            u[:, k+1] = u[:, k] if (k + 1) < self._Nu else np.zeros((6,), dtype=np.float64)
-
-        end = time.perf_counter()
-        print(f"Elapsed time for exact discrete LTI simulation: {(end - start)*1e3:.3f} ms")
-        return z, u
-    '''
 
     def _generate_dynamics_model(self) -> AcadosModel:
         """
@@ -316,8 +310,8 @@ class SixDofRobot:
         This is a first-order, decoupled, speed closed-loop model of the robot.
         """
         # States
-        q = self.state[:self.n_dof]
-        q_dot = self.state[self.n_dof:]
+        q = self.state[:self._n_dof]
+        q_dot = self.state[self._n_dof:]
 
         # Output 
         pose_ee_rot  = self.fk_casadi_rot(q)  
@@ -345,84 +339,16 @@ class SixDofRobot:
         model.t_label = '$t$ [s]'
 
         return model, y
-    '''
-    def _generate_dynamics_model(self) -> AcadosModel:
-        """
-        Create the ODE representation: dx/dt = f(x, u)
-        
-        Dynamics model:
-        dq/dt = q_dot (integrator for the position)
-        dq_dot/dt = -diag(th) @ q_dot + diag(th) @ u
-        
-        This is a first-order, decoupled, speed closed-loop model of the robot.
-        """
-        # States
-        q = self.state[:self.n_dof]
-        q_dot = self.state[self.n_dof:]
-
-        # Output 
-        pose_ee_rot  = self.fk_casadi_rot(q)  # position + rotation matrix
-        vee = self.dk_casadi(q, q_dot)
-
-        p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
-        y = ca.vertcat(p_task, R_task, vee)
-
-        # Constants
-        Wcv = ca.diag(self._Wcv)
-        
-        # State derivatives
-        xdot = ca.SX.sym('xdot', 2*self.n_dof)
-
-        # Dynamics
-        f_expl = ca.vertcat(q_dot, -Wcv @ q_dot + Wcv @ self.input)
-        f_impl = xdot - f_expl
-
-        model = AcadosModel()
-
-        model.f_impl_expr = f_impl
-        model.f_expl_expr = f_expl
-        model.x = self.state
-        model.xdot = xdot
-        model.u = self.input 
-
-        model.x_labels = [r'$q1$ [rad]', r'$\dot{q1}$ [rad/s]', r'$q2$ [rad]', r'$\dot{q2}$ [rad/s]', r'$q3$ [rad]', r'$\dot{q3}$ [rad/s]',
-                          r'$q4$ [rad]', r'$\dot{q4}$ [rad/s]', r'$q5$ [rad]', r'$\dot{q5}$ [rad/s]', r'$q6$ [rad]', r'$\dot{q6}$ [rad/s]']
-        model.u_labels = [r'$\dot{q1_ref}$ [rad/s]', r'$\dot{q2_ref}$ [rad/s]', r'$\dot{q3_ref}$ [rad/s]', r'$\dot{q4_ref}$ [rad/s]',
-                          r'$\dot{q5_ref}$ [rad/s]', r'$\dot{q6_ref}$ [rad/s]']
-        model.t_label = '$t$ [s]'
-
-        return model, y
-    '''
+    
     def forward_kinematics_euler(self, q):
-        """
-        Compute forward kinematics for given joint positions (Euler angles version)
-        
-        Args:
-            q: Joint positions (CasADi symbolic or numeric)
-        
-        Returns:
-            End-effector pose [position(3), euler_angles(3)] as CasADi expression
-        """
         return self.fk_casadi_euler(q)
 
     def forward_kinematics_quat(self, q): 
-        """FK: position + quaternion"""
         return self.fk_casadi_quat(q)
 
     def forward_kinematics_rot(self, q): 
-        """FK: position + quaternion"""
         return self.fk_casadi_rot(q)
     
     def differential_kinematics(self, q, q_dot):
-        """
-        Compute differential kinematics (end-effector velocity)
-        
-        Args:
-            q: Joint positions (CasADi symbolic or numeric)
-            q_dot: Joint velocities (CasADi symbolic or numeric)
-        
-        Returns:
-            End-effector velocity [linear_vel(3), angular_vel(3)] as CasADi expression
-        """
         return self.dk_casadi(q, q_dot)
     
