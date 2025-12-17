@@ -172,6 +172,14 @@ t = sim0_analysis['time']
 q = sim0_analysis['q']
 qdot =  sim0_analysis['qdot']
 
+fig_rmse = plotter.bar_plot(
+    values=np.array([sim0_analysis['max_rmse'], sim1_analysis['max_rmse'], sim2_analysis['max_rmse']]),
+    labels= ["H=sim0", "H=sim1", "H=sim2"],
+    xlabel="Simulation",
+    ylabel="Max RMSE",
+    title=""
+)
+
 # Joint Angles Plot
 fig_joints_q = plotter.joints(t, q, name="q", unit="rad")
 # Joint Accelerations Plot
@@ -334,7 +342,7 @@ print(f"Horizon 50:  total_sqp={sim2_analysis['total_sqp_iter']}, avg_sqp={sim2_
 
 
 # Generate HTML report
-task_figs = [fig_u, fig_e1, fig_e2, fig_e3, fig_e4, fig_joints_q, fig_joints_qdot, fig_joints_qdotdot]
+task_figs = [fig_rmse, fig_u, fig_e1, fig_e2, fig_e3, fig_e4, fig_joints_q, fig_joints_qdot, fig_joints_qdotdot]
 solver_figs = [fig_kkt, fig_res_components, fig_sqp, fig_integrator_time, fig_mpc_time, fig_cost]
 
 plotter.gen_html_report(
