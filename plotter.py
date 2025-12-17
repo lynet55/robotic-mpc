@@ -1,7 +1,6 @@
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from scipy import stats # For histogram bin calculation
 
 class Plotter:
     def __init__(self, template: str = "ggplot2"):
@@ -117,6 +116,50 @@ class Plotter:
             )
         )
 
+        return fig
+
+    def bar_plot(
+        self,
+        values: np.ndarray,
+        labels: list,
+        xlabel: str = "Category",
+        ylabel: str = "Value",
+        title: str = "Bar Plot",
+        ylog: bool = False,
+    ):
+        """
+        Create a simple bar plot.
+
+        Args:
+            values: 1D array of values for the bars.
+            labels: List of labels for each bar.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            title: Plot title.
+            ylog: Use logarithmic scale for y-axis.
+        """
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Bar(
+                x=labels,
+                y=values,
+                text=values,
+                textposition='auto',
+                texttemplate='%{y:.2f}',
+            )
+        )
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=14)),
+            xaxis=dict(title=dict(text=xlabel)),
+            yaxis=dict(title=dict(text=ylabel), type="log" if ylog else None),
+            template=self.template,
+            autosize=True,
+            height=320,
+            margin=dict(l=50, r=50, t=40, b=40),
+            showlegend=False,
+        )
         return fig
 
     def gen_html_report(
