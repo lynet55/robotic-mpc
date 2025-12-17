@@ -82,6 +82,11 @@ class SixDofRobot:
             raise TypeError(f"Expected type float, got {type(new_Ts).__name__}.")
         self._Ts = new_Ts
 
+    @property
+    def n_dof(self):
+        return self._n_dof
+    
+
     def _update_discrete_lti_matrices(self,):
        
         w = self._Wcv 

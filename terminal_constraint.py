@@ -4,10 +4,10 @@ from scipy.linalg import solve_discrete_are
 from prediction_model import SixDofRobot
 from loader import UrdfLoader as urdf
 
-def dlqr(A, B, Q, R):
+def discrete_lqr(A, B, Q, R):
     """
     Discrete-time LQR.
-    Returns K, P where u = K x.
+    Returns K, P by solving DARE.
     """
     P = solve_discrete_are(A, B, Q, R)
     K = -np.linalg.solve(R + B.T @ P @ B, B.T @ P @ A)
@@ -20,11 +20,20 @@ def build_constraints(q_min, q_max, qdot_min, qdot_max, nx=12, nu=6):
     """
     assert nx == 12 and nu == 6, "Expected dimensions: nx = 12, nu = 6"
 
-    # E extracts q from x = [q; qdot]
-    E = np.block([np.eye(6), np.zeros((6, 6))])  
+    if (q_min.shape != (nx//2,) or q_max.shape != (nx//2,) or
+        qdot_min.shape != (nu,) or qdot_max.shape != (nu,)):
+        raise ValueError(
+            f"""Expected shapes:
+            - q_min, q_max: {(nx//2,)}
+            - qdot_min, qdot_max: {(nu,)}
+            """
+        )
 
-    Cx = np.vstack([E, -E])                       
-    dx = np.hstack([q_max, -q_min])               
+    # E extracts q from x = [q; qdot]
+    E = np.block([np.eye(nx//2), np.zeros((nx//2, nx//2))])  
+
+    Cx = np.vstack([E, -E])          # (2nx, nx)                       
+    dx = np.hstack([q_max, -q_min])  # (nx, nx)            
 
     Cu = np.vstack([np.eye(6), -np.eye(6)])       
     du = np.hstack([qdot_max, -qdot_min])         
@@ -42,7 +51,7 @@ def alpha_from_ellipsoid_constraints(P, C, d, safety=0.98):
     alpha_i = np.empty(len(d), dtype=float)
     for i in range(len(d)):
         ci = C[i, :].reshape(-1, 1)  # column
-        denom = float(ci.T @ Pinv @ ci)
+        denom = (ci.T @ Pinv @ ci).item()
         if denom <= 1e-15:
             alpha_i[i] = np.inf if d[i] >= 0 else 0.0
         else:
@@ -70,7 +79,8 @@ def plot_2d_slice(P, alpha, q_min, q_max, dims=(0, 1), title="2D slice (others =
     Illustrative 2D slice of ellipsoid x^T P x <= alpha for x[dims] varying, others=0.
     This is NOT the exact projection; it's a slice. Useful to visually sanity-check.
     """
-    i, j = dims
+    # index of coordinates to consider 
+    i, j = dims 
     # Extract 2x2 block for the slice
     P2 = P[np.ix_([i, j], [i, j])]
 
@@ -85,20 +95,19 @@ def plot_2d_slice(P, alpha, q_min, q_max, dims=(0, 1), title="2D slice (others =
 
     plt.figure()
     plt.plot(ell[:,0], ell[:,1])
-    plt.axvline(q_min[i], linestyle="--")
-    plt.axvline(q_max[i], linestyle="--")
-    plt.axhline(q_min[j], linestyle="--")
-    plt.axhline(q_max[j], linestyle="--")
+    if i < 6 and j < 6:
+        plt.axvline(q_min[i], linestyle="--")
+        plt.axvline(q_max[i], linestyle="--")
+        plt.axhline(q_min[j], linestyle="--")
+        plt.axhline(q_max[j], linestyle="--")
     plt.xlabel(fr"$x_{i}$")
     plt.ylabel(fr"$x_{j}$")
     plt.title(title)
     plt.grid(True, linestyle="--", linewidth=0.5)
 
 def main():
-    # -----------------------------
-    # 1) Inserisci qui il tuo modello discreto
-    # -----------------------------
-    # ESEMPIO: A_d, B_d (devi sostituire con i tuoi)
+    
+    # Definition of LTI discrete matrices 
     robot_loader = urdf('ur5')
     prediction_model = SixDofRobot(
             urdf_loader=robot_loader,
@@ -109,45 +118,40 @@ def main():
     A_d = prediction_model.Ad
     B_d = prediction_model.Bd
 
-    # -----------------------------
-    # 2) Scegli Q, R (euristico)
-    #    Esempio: penalizza posizioni più delle velocità
-    # -----------------------------
-    wq = 10.0
-    wqd = 1.0
-    Q = np.diag([wq]*6 + [wqd]*6)
-    R = 0.1*np.eye(6)
+    nx = 2*prediction_model.n_dof
+    nu = prediction_model.n_dof
 
-    # -----------------------------
-    # 3) Bounds (devi mettere i tuoi)
-    # -----------------------------
-    q_min = -2*np.pi * np.ones(6)
-    q_max =  2*np.pi * np.ones(6)
-    qdot_min = -np.pi * np.ones(6)
-    qdot_max =  np.pi * np.ones(6)
+    # LQR weight matrices
+    wq = 1.0
+    wqd = 0.1
+    Q = np.diag([wq]*nu + [wqd]*nu)
+    R = 0.1*np.eye(nu)
 
-    # -----------------------------
-    # 4) LQR -> K, P
-    # -----------------------------
-    K, P = dlqr(A_d, B_d, Q, R)
 
-    # -----------------------------
-    # 5) Costruisci vincoli lineari
-    # -----------------------------
-    Cx, dx, Cu, du = build_constraints(q_min, q_max, qdot_min, qdot_max)
+    q_min = np.array([-2*np.pi,-2*np.pi,-np.pi,-2*np.pi,-2*np.pi,-2*np.pi], dtype=np.float64)
+    q_max = np.array([-2*np.pi,-2*np.pi,-np.pi,-2*np.pi,-2*np.pi,-2*np.pi], dtype=np.float64)
+    qdot_min = -np.pi * np.ones(nu)
+    qdot_max =  np.pi * np.ones(nu)
 
-    # Vincoli sotto LQR: Cx x <= dx, e Cu K x <= du
+    # LQR matrices from ricatti equations
+    K, P = discrete_lqr(A_d, B_d, Q, R)
+    print(f"P dimensions: {np.shape(P)}")
+
+
+    # Construction of linear inequalities
+    Cx, dx, Cu, du = build_constraints(q_min, q_max, qdot_min, qdot_max, nx=nx, nu=nu)
+
+    # Linear state inequalities over LQR auxiloary control law
     C = np.vstack([Cx, Cu @ K])
     d = np.hstack([dx, du])
 
-    # -----------------------------
-    # 6) Calcolo alpha
-    # -----------------------------
+    # Derivation of alpha
     alpha, alpha_i, idx_active = alpha_from_ellipsoid_constraints(P, C, d, safety=0.98)
 
     print(f"alpha* (with safety) = {alpha:.6e}")
     print(f"active constraint index = {idx_active}")
     print(f"raw alpha_active = {alpha_i[idx_active]:.6e}")
+    print(f"LQR gain K: {K}")
 
     # -----------------------------
     # 7) Plot diagnostici
@@ -155,9 +159,9 @@ def main():
     plot_alpha_limits(alpha_i, idx_active, title="Alpha limits from all constraints (log scale)")
 
     # Slice 2D sulle prime due posizioni (q1,q2): indices 0,1
-    plot_2d_slice(P, alpha, q_min=np.hstack([q_min, -1e9*np.ones(6)]),
-                  q_max=np.hstack([q_max,  1e9*np.ones(6)]),
-                  dims=(0, 1),
+    plot_2d_slice(P, alpha, q_min=q_min,
+                  q_max=q_max,
+                  dims=(2, 10),
                   title="Ellipsoid slice on (q1,q2), others=0, with joint position bounds")
 
     plt.show()
