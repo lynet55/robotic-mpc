@@ -1,354 +1,311 @@
-from simulator import Simulator as sim
+from simulator import SimulationManager
+from plotter import Plotter
 import numpy as np
 
-sim0 = sim(
-    dt=0.001,
-    prediction_horizon=200,
-    simulation_time=3,
-    surface_limits=((-2, 2), (-2, 2)),
-    surface_origin=np.array([0.0, 0.0, 0.0]),
-    surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
-    qdot_0=np.array([2,2,2,2,2,2]),
-    q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-    wcv=np.array([5,10,15,20,25,35]),
-    scene=True
-)
+plotter = Plotter(template="plotly_white")
 
-sim1 = sim(
-    dt=0.001,
-    prediction_horizon=10,
-    simulation_time=3,
-    surface_limits=((-2, 2), (-2, 2)),
-    surface_origin=np.array([0.0, 0.0, 0.0]),
-    surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
-    qdot_0=np.array([2,2,2,2,2,2]),
-    q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-    wcv=np.array([5,10,15,20,25,35]),
-    scene=True
-)
+# Define joint limits for plotting boundaries
+JOINT_POSITION_LIMITS = np.array([np.pi, np.pi, np.pi, np.pi, np.pi, np.pi])
+JOINT_VELOCITY_LIMITS = np.array([3.15, 3.15, 3.15, 3.15, 3.15, 3.15]) # UR5e limits
+JOINT_ACCELERATION_LIMITS = np.array([10.0, 10.0, 10.0, 10.0, 10.0, 10.0]) # Example limitse parameters shared by all simulations
 
-sim2 = sim(
-    dt=0.001,
-    prediction_horizon=50,
-    simulation_time=3,
-    surface_limits=((-2, 2), (-2, 2)),
-    surface_origin=np.array([0.0, 0.0, 0.0]),
-    surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
-    qdot_0=np.array([2,2,2,2,2,2]),
-    q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-    wcv=np.array([5,10,15,20,25,35]),
-    scene=True
-)
-sim0.run()
-sim1.run()
-sim2.run()
-
-def analyze_simulation(sim_obj):
-    """
-    Analyze simulation results and compute error signals.
-    
-    Args:
-        sim_obj: Simulator object that has been run
-        
-    Returns:
-        dict: Dictionary containing analysis results
-    """
-    results = sim_obj.get_results()
-    
-    t = results['time']
-    q = results['q']
-    u = results['u']
-    
-    # Transform to task space
-    R_ee_t = np.array([
-        [1.0,  0.0,  0.0],
-        [0.0, -1.0,  0.0],
-        [0.0,  0.0, -1.0],
-    ])
-    ee_xyz = results["ee_pose"][:3]
-    ee_task = R_ee_t @ ee_xyz + np.array([0.0, 0.0, 1.0])[:, np.newaxis]
-    
-    px_ref = sim_obj.mpc.px_ref
-    vy_ref = sim_obj.mpc.vy_ref
-    
-    # Compute error signals
-    n_steps = ee_task.shape[1]
-    e1 = np.zeros(n_steps)
-    e2 = np.zeros(n_steps)
-    e3 = np.zeros(n_steps)
-    e4 = np.zeros(n_steps)
-    z_surface = np.zeros(n_steps)
-    rmse = np.zeros(n_steps)
-    
-    for i in range(n_steps):
-        ee_x = ee_task[0, i]
-        ee_y = ee_task[1, i]
-        ee_z = ee_task[2, i]
-        
-        ee_vy = sim_obj.simulation_model.ee_velocity(i)[1]
-        n = sim_obj.surface.get_normal_vector_casadi()(ee_x, ee_y)
-        ee_rot_vector = sim_obj.simulation_model.ee_orientation(i)
-        
-        e1[i] = sim_obj.surface.get_point_on_surface(ee_x, ee_y) - ee_z  # e1 = s(x,y) - z
-        e2[i] = px_ref - ee_x  # px_ref - px
-        e3[i] = n.T @ ee_rot_vector  # orientation error
-        e4[i] = vy_ref - ee_vy  # e4 = vy - v_ref
-        z_surface[i] = sim_obj.surface.get_point_on_surface(ee_x, ee_y)
-    
-    max_rmse = np.max(np.sqrt(e1**2 + e2**2 + e3**2 + e4**2))
-
-    # Acados solver statistics - now collected at EVERY MPC solve
-    # residuals shape: (Nsim, 4) with columns [res_stat, res_eq, res_ineq, res_comp]
-    residuals_all = results['residuals']
-    sqp_iter_all = results['sqp_iter']  # SQP iterations per solve
-    solver_status_all = results['solver_status']  # Solver status per solve
-    solver_time_all = results['solver_time_tot']  # Acados solver time per solve
-    mpc_time = results['mpc_time']  # Python-measured MPC time per solve
-    integration_time = results['integration_time']
-    cost_history = results['cost_history']
-    
-    # Compute KKT residual (max of all components) at each simulation step
-    kkt_residuals = np.max(residuals_all, axis=1)
-    
-    # Individual residual components over time
-    res_stat = residuals_all[:, 0]
-    res_eq = residuals_all[:, 1]
-    res_ineq = residuals_all[:, 2]
-    res_comp = residuals_all[:, 3]
-    
-    # Summary statistics
-    total_sqp_iter = np.sum(sqp_iter_all)
-    avg_sqp_iter = np.mean(sqp_iter_all)
-    total_solver_time = np.sum(solver_time_all)
-    num_failures = np.sum(solver_status_all != 0)
-
-    return {
-        'time': t,
-        'q': q,
-        'qdot': results['qdot'],
-        'u': u,
-        'ee_task': ee_task,
-        'px_ref': px_ref,
-        'vy_ref': vy_ref,
-        'e1': e1,
-        'e2': e2,
-        'e3': e3,
-        'e4': e4,
-        'z_surface': z_surface,
-        # Solver stats (per simulation step)
-        'sqp_iter': sqp_iter_all,
-        'solver_status': solver_status_all,
-        'solver_time': solver_time_all,
-        'kkt_residuals': kkt_residuals,
-        'cost_history': cost_history,
-        'res_stat': res_stat,
-        'res_eq': res_eq,
-        'res_ineq': res_ineq,
-        'res_comp': res_comp,
-        # Timing
-        'mpc_time': mpc_time,
-        'integration_time': integration_time,
-        'total_time': mpc_time + integration_time,
-        # Summary stats
-        'total_sqp_iter': total_sqp_iter,
-        'avg_sqp_iter': avg_sqp_iter,
-        'total_solver_time': total_solver_time,
-        'num_failures': num_failures,
-        'max_rmse': max_rmse
+BASE_PARAMS = {
+    'dt': 0.001,
+    'simulation_time': 2,
+    'surface_limits': ((-2, 2), (-2, 2)),
+    'surface_origin': np.array([0.0, 0.0, 0.0]),
+    'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
+    #surface function coefficients for a paraboloid
+    'qdot_0': np.array([2, 2, 2, 2, 2, 2]),
+    'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+    'wcv': np.array([5, 10, 15, 20, 25, 35]),
+    'scene': True,
+    'prediction_horizon': 200,  # Default value
+    'solver_options': {
+        'nlp_solver_type': 'SQP_RTI'
     }
+}
 
-    
+# ============================================================================
+# SIMULATION QUEUE - Define all simulations to run
+# ============================================================================
 
-# Analyze sim0
-sim0_analysis = analyze_simulation(sim0)
-sim1_analysis = analyze_simulation(sim1)
-sim2_analysis = analyze_simulation(sim2)
+# 1. Initialize the manager with base parameters
+manager = SimulationManager(BASE_PARAMS)
 
-# Plotting
-from plotter import Plotter
-plotter = Plotter()
+# Example 1: Single parameter sweep
+# manager.sweep_parameter('prediction_horizon', [10, 50, 100, 200, 300], name_template='H={}')
+# surface coeffs random gen sweep, plot variance in errors. mean error. 
 
-t = sim0_analysis['time']
-q = sim0_analysis['q']
-qdot =  sim0_analysis['qdot']
+# Example 2: Grid search over multiple parameters
+manager.grid_search({
+    'prediction_horizon': [50, 200],
+    'dt': [0.001, 0.005],
+    'solver_options': [{'nlp_solver_type': 'SQP'}, {'nlp_solver_type': 'SQP_RTI'}]
+}, name_template=lambda p: f"H={p['prediction_horizon']}_dt={p['dt']}_{p['solver_options']['nlp_solver_type']}")
 
-fig_rmse = plotter.bar_plot(
-    values=np.array([sim0_analysis['max_rmse'], sim1_analysis['max_rmse'], sim2_analysis['max_rmse']]),
-    labels= ["H=sim0", "H=sim1", "H=sim2"],
+# Example 3: Manual definition (original approach)
+# manager.add_manual(name='H=200', params={'prediction_horizon': 200})
+# manager.add_manual(name='H=10', params={'prediction_horizon': 10})
+# manager.add_manual(name='H=50', params={'prediction_horizon': 50})
+
+# 2. Run all queued simulations
+manager.run_all()
+sims = manager.sims
+
+# ============================================================================
+# PLOTTING - Automatically plot all simulations
+# ============================================================================
+
+# Use first simulation for time axis and single-sim plots
+ref_sim = sims[0]
+t = ref_sim.get_results()['time']
+
+# Grouped bar plot for RMSE comparison
+rmse_data = {
+    "$e_1$ (surface)": [s.rmse_e1 for s in sims],
+    "$e_2$ (x-pos)": [s.rmse_e2 for s in sims],
+    "$e_3$ (orient)": [s.rmse_e3 for s in sims],
+    "$e_4$ (y-vel)": [s.rmse_e4 for s in sims],
+}
+fig_rmse = plotter.grouped_bar_plot(
+    data=rmse_data,
+    group_labels=[s.name for s in sims],
     xlabel="Simulation",
-    ylabel="Max RMSE",
-    title=""
+    ylabel="RMSE",
+    title="Constraint RMSE Comparison"
 )
 
-# Joint Angles Plot
-fig_joints_q = plotter.joints(t, q, name="q", unit="rad")
-# Joint Accelerations Plot
-fig_joints_qdot = plotter.joints(t, qdot, name="\dot{q}", unit="rad/s")
-# Joint Accelerations Plot
-fig_joints_qdotdot = plotter.joints(t, qdot, name="\ddot{q}", unit="rad/s²")
+# Grouped bar plot for ITSE comparison
+itse_data = {
+    "$e_1$ (surface)": [s.itse_e1 for s in sims],
+    "$e_2$ (x-pos)": [s.itse_e2 for s in sims],
+    "$e_3$ (orient)": [s.itse_e3 for s in sims],
+    "$e_4$ (y-vel)": [s.itse_e4 for s in sims],
+}
+fig_itse = plotter.grouped_bar_plot(
+    data=itse_data,
+    group_labels=[s.name for s in sims],
+    xlabel="Simulation",
+    ylabel="ITSE",
+    title="Constraint ITSE Comparison"
+)
+# Bar chart for total computation time
+fig_total_time = plotter.bar_plot(
+    values=[s.get_summary_stats()['total_computation_time'] for s in sims],
+    labels=[s.name for s in sims],
+    xlabel="Simulation",
+    ylabel="Total Time [s]",
+    title="Total Computation Time (MPC + Integration)"
+)
 
-# Control Input Plot
+
+# Joint plots comparing all simulations
+fig_joints_q = plotter.joints(
+    t, *[s.get_results()['q'] for s in sims], 
+    labels=[s.name for s in sims],
+    title="Joint Angles", name="q", unit="rad",
+    lower_bounds=-JOINT_POSITION_LIMITS,
+    upper_bounds=JOINT_POSITION_LIMITS
+)
+fig_joints_qdot = plotter.joints(
+    t, *[s.get_results()['qdot'] for s in sims], 
+    labels=[s.name for s in sims],
+    title="Joint Velocities", name="\\dot{q}", unit="rad/s",
+    lower_bounds=-JOINT_VELOCITY_LIMITS,
+    upper_bounds=JOINT_VELOCITY_LIMITS
+)
+fig_joints_qdotdot = plotter.joints(
+    t, *[s.get_results()['u'] for s in sims], 
+    labels=[s.name for s in sims],
+    title="Joint Accelerations (Control Input)", name="\\ddot{q}", unit="rad/s²",
+    lower_bounds=-JOINT_ACCELERATION_LIMITS,
+    upper_bounds=JOINT_ACCELERATION_LIMITS
+)
+
+# Control Input Plot for reference sim
+u_ref = ref_sim.get_results()['u']
 fig_u = plotter.generic_plot(
     t,
-    sim0_analysis['u'][0],
-    sim0_analysis['u'][1],
-    sim0_analysis['u'][2],
-    sim0_analysis['u'][3],
-    sim0_analysis['u'][4],
-    sim0_analysis['u'][5],
+    u_ref[0], u_ref[1], u_ref[2], u_ref[3], u_ref[4], u_ref[5],
     xlabel="$t \\ [\\text{s}]$",
     ylabel="$u$ [rad/s]",
-    title="$ sim_{0}$",
-    labels=["$\dot{q}_{1}$", "$\dot{q}_{1}$","$\dot{q}_{3}$", "$\dot{q}_{4}$", "$\dot{q}_{5}$", "$\dot{q}_{6}$"])
+    title=f"Control Inputs - {ref_sim.name}",
+    labels=["$\dot{q}_{1}$", "$\dot{q}_{2}$", "$\dot{q}_{3}$", 
+            "$\dot{q}_{4}$", "$\dot{q}_{5}$", "$\dot{q}_{6}$"]
+)
+
+# ============================================================================
+# COMPARATIVE PLOTS - All simulations overlaid
+# ============================================================================
 
 # Constraint error plots
 fig_e1 = plotter.generic_plot(
     t, 
-    sim0_analysis['e1'], 
-    sim1_analysis['e1'], 
-    sim2_analysis['e1'], 
+    *[s.tracking_error_e1 for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$e_1 \\ [\\text{m}]$", 
     title="$e_1 = s(x,y) - z$", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
 fig_e2 = plotter.generic_plot(
     t, 
-    sim0_analysis['e2'], 
-    sim1_analysis['e2'], 
-    sim2_analysis['e2'], 
+    *[s.tracking_error_e2 for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$e_2 \\ [\\text{m}]$", 
     title="$e_2 = p_{x,\\text{ref}} - p_x$", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
 fig_e3 = plotter.generic_plot(
     t, 
-    sim0_analysis['e3'], 
-    sim1_analysis['e3'], 
-    sim2_analysis['e3'], 
+    *[s.tracking_error_e3 for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$e_3$", 
     title="$e_3 = n^T R_{\\text{ee}} v_{\\text{ee}}$", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
 fig_e4 = plotter.generic_plot(
     t, 
-    sim0_analysis['e4'], 
-    sim1_analysis['e4'], 
-    sim2_analysis['e4'], 
+    *[s.tracking_error_e4 for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$e_4 \\ [\\text{m/s}]$", 
     title="$e_4 = v_{\\text{ref}} - v_{\\text{ee}}$", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
-# Control Input Plots
+# Control Input Comparison - Joint 1
 fig_u1 = plotter.generic_plot(
     t, 
-    sim0_analysis['u'][0], 
-    sim1_analysis['u'][0], 
-    sim2_analysis['u'][0], 
+    *[s.get_results()['u'][0] for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$u_1 \\ [\\text{rad/s}]$", 
     title="Control Input - Joint 1", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
 # KKT Residuals
 fig_kkt = plotter.generic_plot(
     t, 
-    sim0_analysis['kkt_residuals'], 
-    sim1_analysis['kkt_residuals'], 
-    sim2_analysis['kkt_residuals'], 
+    *[s.kkt_residuals for s in sims],
     ylog=True, 
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$\\text{KKT Residual (max)}$", 
     title="KKT Residuals over Simulation", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
-# Individual residual components
+# Individual residual components for reference sim
+res = ref_sim.get_results()
 fig_res_components = plotter.generic_plot(
     t,
-    sim0_analysis['res_stat'],
-    sim0_analysis['res_eq'],
-    sim0_analysis['res_ineq'],
-    sim0_analysis['res_comp'],
+    res['res_stat'],
+    res['res_eq'],
+    res['res_ineq'],
+    res['res_comp'],
     ylog=True,
     xlabel="$t \\ [\\text{s}]$",
     ylabel="$\\text{Residual}$",
-    title="Residual Components ($H=200$)",
+    title=f"Residual Components - {ref_sim.name}",
     labels=["Stationarity", "Equality", "Inequality", "Complementarity"]
 )
 
 # SQP Iterations
 fig_sqp = plotter.generic_plot(
     t,
-    sim0_analysis['sqp_iter'],
-    sim1_analysis['sqp_iter'],
-    sim2_analysis['sqp_iter'],
-    ylog=True,
+    *[s.sqp_iter for s in sims],
     xlabel="$t \\ [\\text{s}]$",
     ylabel="$\\text{SQP Iterations}$",
     title="SQP Iterations per MPC Solve",
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
 # Cost history
 fig_cost = plotter.generic_plot(
     t,
-    sim0_analysis['cost_history'],
-    sim1_analysis['cost_history'],
-    sim2_analysis['cost_history'],
+    *[s.cost_history for s in sims],
     ylog=True,
     xlabel="$t \\ [\\text{s}]$",
     ylabel="$\\text{Cost}$",
     title="Cost History",
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
 # Timing Performance
 fig_mpc_time = plotter.generic_plot(
     t, 
-    sim0_analysis['mpc_time'], 
-    sim1_analysis['mpc_time'], 
-    sim2_analysis['mpc_time'], 
+    *[s.mpc_time for s in sims],
+    upper_bound=ref_sim.dt,
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$\\text{MPC Time} \\ [\\text{s}]$", 
-    title="MPC Computation Time", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    title=f"MPC Computation Time (dt = {ref_sim.dt}s)", 
+    labels=[s.name for s in sims]
 )
 
 fig_integrator_time = plotter.generic_plot(
     t, 
-    sim0_analysis['integration_time'], 
-    sim1_analysis['integration_time'], 
-    sim2_analysis['integration_time'], 
+    *[s.integration_time for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$\\text{Integration Time} \\ [\\text{s}]$", 
     title="Integration Time", 
-    labels=["$H=200$", "$H=10$", "$H=50$"]
+    labels=[s.name for s in sims]
 )
 
-# Summary statistics
+# Stacked bar chart for average time usage
+avg_time_data = {
+    "Avg. MPC Time": [s.get_summary_stats()['avg_mpc_time'] for s in sims],
+    "Avg. Integration Time": [s.get_summary_stats()['avg_integration_time'] for s in sims],
+}
+fig_avg_time_usage = plotter.stacked_bar_plot(
+    data=avg_time_data,
+    group_labels=[s.name for s in sims],
+    xlabel="Simulation",
+    ylabel="Average Time [s]",
+    title="Average Time Usage per Step"
+)
+
+fig_grid_search = plotter.grid_search_heatmap(
+    sims=sims,
+    param_x='prediction_horizon',
+    param_y='dt',
+    metric='rmse_e1',
+    xlabel='Prediction Horizon',
+    ylabel='Solver Type',
+    title='$e_1$ RMSE vs. MPC Parameters'
+)
+
+
+# ============================================================================
+# SUMMARY STATISTICS
+# ============================================================================
 print("=== Solver Statistics Summary ===")
-print(f"Horizon 200: total_sqp={sim0_analysis['total_sqp_iter']}, avg_sqp={sim0_analysis['avg_sqp_iter']:.2f}, total_time={sim0_analysis['total_solver_time']:.4f}s, failures={sim0_analysis['num_failures']}")
-print(f"Horizon 10:  total_sqp={sim1_analysis['total_sqp_iter']}, avg_sqp={sim1_analysis['avg_sqp_iter']:.2f}, total_time={sim1_analysis['total_solver_time']:.4f}s, failures={sim1_analysis['num_failures']}")
-print(f"Horizon 50:  total_sqp={sim2_analysis['total_sqp_iter']}, avg_sqp={sim2_analysis['avg_sqp_iter']:.2f}, total_time={sim2_analysis['total_solver_time']:.4f}s, failures={sim2_analysis['num_failures']}")
+for s in sims:
+    stats = s.get_summary_stats()
+    print(f"{s.name:12} | total_sqp={stats['total_sqp_iterations']:6} | "
+          f"avg_sqp={stats['avg_sqp_iterations']:5.2f} | " +
+          f"total_sim_time={stats['total_computation_time']:7.3f}s | "
+          f"failures={stats['num_solver_failures']:3}")
+    print(f"           | RMSE: e1={stats['rmse_e1']:.4f}, e2={stats['rmse_e2']:.4f}, e3={stats['rmse_e3']:.4f}, e4={stats['rmse_e4']:.4f}")
+    print(f"           | ITSE: e1={stats['itse_e1']:.4f}, e2={stats['itse_e2']:.4f}, e3={stats['itse_e3']:.4f}, e4={stats['itse_e4']:.4f}")
 
-
-# Generate HTML report
-task_figs = [fig_rmse, fig_u, fig_e1, fig_e2, fig_e3, fig_e4, fig_joints_q, fig_joints_qdot, fig_joints_qdotdot]
-solver_figs = [fig_kkt, fig_res_components, fig_sqp, fig_integrator_time, fig_mpc_time, fig_cost]
+# ============================================================================
+# GENERATE HTML REPORT
+# ============================================================================
+task_figs = [fig_grid_search, fig_rmse, fig_itse, fig_total_time, fig_e1, fig_e2, fig_e3, fig_e4, 
+             fig_joints_q, fig_joints_qdot, fig_joints_qdotdot]
+solver_figs = [fig_kkt, fig_res_components, fig_sqp, 
+               fig_integrator_time, fig_mpc_time, fig_avg_time_usage, fig_cost]
 
 plotter.gen_html_report(
     task_figs=task_figs,
     solver_figs=solver_figs,
     video_folder="video",
-    title="6DOF robot manipulator",
+    title=f"6DOF Robot Manipulator - Comparative Study ({len(sims)} simulations)",
     filename="report.html"
 )
+
+print(f"\n{'='*60}")
+print(f"Report generated: report.html")
+print(f"{'='*60}")

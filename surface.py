@@ -2,7 +2,7 @@ import casadi as ca
 import numpy as np
 class Surface:
 
-    def __init__(self, position, orientation_rpy, limits):
+    def __init__(self, position, orientation_rpy, limits, coefficients=None):
         self.position = position
         self.orientation_rpy = orientation_rpy
         self.limits = limits
@@ -10,22 +10,34 @@ class Surface:
 
         self.x = ca.SX.sym("x")
         self.y = ca.SX.sym("y")
-        a, b, c, d, e, f = -0.1, 0.1, -0.01, 0.01, 0.01, 0.0
-        self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
 
-        '''
-        wave_amplitude = 0.1
-        wave_freq_x = 20.0
-        wave_freq_y = 20.0
-        # |CORREZZIONE| Distinguerei la superficie quadratica da quella con sinusoidi
-        self.quadratic_surface = wave_amplitude * (ca.sin(wave_freq_x * self.x) + ca.sin(wave_freq_y * self.y))
-        '''
+        self.coeffs = {
+            'a': -0.1, 'b': 0.1, 'c': -0.01,
+            'd': 0.01, 'e': 0.01, 'f': 0.0
+        }
+        if coefficients:
+            self.coeffs.update(coefficients)
+
+        self.quadratic_surface = self.coeffs['a']*self.x**2 + self.coeffs['b']*self.y**2 + self.coeffs['c']*self.x*self.y + self.coeffs['d']*self.x + self.coeffs['e']*self.y + self.coeffs['f']
+        self._build_surface()
+
+    def _build_surface(self):
+        """Build the symbolic surface expression from coefficients."""
+        c = self.coeffs
+        self.quadratic_surface = (
+            c['a']*self.x**2 + c['b']*self.y**2 + c['c']*self.x*self.y +
+            c['d']*self.x + c['e']*self.y + c['f']
+    )
+
+    def rebuild(self):
+        """Rebuilds the symbolic surface expression using current coefficients."""
+        self.quadratic_surface = self.coeffs['a']*self.x**2 + self.coeffs['b']*self.y**2 + self.coeffs['c']*self.x*self.y + self.coeffs['d']*self.x + self.coeffs['e']*self.y + self.coeffs['f']
 
     def get_position(self):
         return self.position
 
     def get_orientation_rpy(self):
-        return self.orientation_rpy
+        return self.orientation_rpy 
 
     def get_limits(self):
         return self.limits

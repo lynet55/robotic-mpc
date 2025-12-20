@@ -149,5 +149,9 @@ class MPC:
 
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
+
+    def finalize_solver(self):
+        """Creates the AcadosOcpSolver. This should be called after all options are set."""
         # Use unique JSON file per instance
         self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados-ocp-json/acados_ocp_{self._instance_id}.json')
+        return self
