@@ -1,15 +1,16 @@
 from loader import UrdfLoader as urdf
 from visualizer import MeshCatVisualizer as robot_visualizer
-from prediction_model import SixDofRobot as prediction_robot_6dof
-from simulation_model import Robot as simulation_robot_6dof
-from trajectory_optimizer import MPC as model_predictive_control
+from models.prediction_model import SixDofRobot as prediction_robot_6dof
+from models.simulation_model import Robot as simulation_robot_6dof
+from mpc.trajectory_optimizer import MPC as model_predictive_control
 from surface import Surface
 from plotter import Plotter
 import numpy as np
 import time
 
 class Simulator:
-    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv, scene=True):
+    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv, q_min,
+                 q_max, dq_min, dq_max, scene=True):
         self.dt = dt
         self.simulation_time = simulation_time
         self.Nsim = int(simulation_time/dt)  # Total number of simulation steps
@@ -36,6 +37,11 @@ class Simulator:
         self.robot_loader = urdf('ur5')
         self.scene = robot_visualizer(self.robot_loader)
 
+        self.q_min = q_min
+        self.q_max = q_max
+        self.dq_min = dq_min
+        self.dq_max = dq_max
+
         self.surface = Surface(
             position=surface_origin,
             orientation_rpy=surface_orientation_rpy,
@@ -61,7 +67,11 @@ class Simulator:
             initial_state=self.initial_state,
             model=self.prediction_model,
             N_horizon=self.prediction_horizon,
-            Tf=self.dt*self.prediction_horizon
+            Tf=self.dt*self.prediction_horizon,
+            qmin=self.q_min,
+            qmax=self.q_max,
+            dq_min=self.dq_min,
+            dq_max=self.dq_max
         )
 
         self.scene.add_surface_from_casadi(
@@ -178,6 +188,10 @@ if __name__ == "__main__":
         qdot_0=np.array([2,2,2,2,2,2]),
         q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
         wcv=np.array([5,10,15,20,25,35]),
+        q_min = np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
+        q_max = np.array([+2*np.pi, +2*np.pi, +np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
+        dq_min = -np.pi * np.ones(6, dtype=float),
+        dq_max =  np.pi * np.ones(6, dtype=float),
         scene=True
     )
     sim0.run()

@@ -1,0 +1,6 @@
+task:
+  px_ref: 0.40
+  vy_ref: -0.20
+  surface:
+    position: [0, 0, 0]
+    rpy: [0, 0, 0]
