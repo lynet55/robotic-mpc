@@ -1,5 +1,6 @@
-from simulator import SimulationManager
-from plotter import Plotter
+from Experiments.simulator import SimulationManager
+from Reporting.plotter import Plotter
+
 import numpy as np
 
 plotter = Plotter(template="plotly_white")
@@ -297,15 +298,24 @@ task_figs = [fig_grid_search, fig_rmse, fig_itse, fig_total_time, fig_e1, fig_e2
              fig_joints_q, fig_joints_qdot, fig_joints_qdotdot]
 solver_figs = [fig_kkt, fig_res_components, fig_sqp, 
                fig_integrator_time, fig_mpc_time, fig_avg_time_usage, fig_cost]
-
+'''
 plotter.gen_html_report(
     task_figs=task_figs,
     solver_figs=solver_figs,
     video_folder="video",
     title=f"6DOF Robot Manipulator - Comparative Study ({len(sims)} simulations)",
     filename="report.html"
+)'''
+report_path = plotter.gen_html_report(
+    task_figs=task_figs,
+    solver_figs=solver_figs,
+    title="My run",
+    filename="run_01.html",
+    open_browser=True,
 )
+print("Report:", report_path)
 
+'''
 print(f"\n{'='*60}")
 print(f"Report generated: report.html")
-print(f"{'='*60}")
+print(f"{'='*60}")'''
