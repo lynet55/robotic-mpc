@@ -421,119 +421,169 @@ class Plotter:
     #     return fig
 
     def gen_html_report(
-        self,
-        task_figs: list = None,
-        solver_figs: list = None,
-        video_folder: str = None,
-        title: str = "Analysis Report",
-        filename: str = "report.html",
+    self,
+    task_figs: list = None,
+    solver_figs: list = None,
+    video_folder: str = None,
+    title: str = "Analysis Report",
+    filename: str = "report.html",
+    output_dir: str = None,
+    open_browser: bool = True,
     ):
-        """Generate HTML report with Video, Task Performance, and Solver Performance sections."""
+        """Generate HTML report with Video, Task Performance, and Solver Performance sections.
+
+        Args:
+            task_figs: list of plotly figures
+            solver_figs: list of plotly figures
+            video_folder: folder containing .mp4 files (optional)
+            title: report title
+            filename: html filename (e.g. 'run_01.html')
+            output_dir: output directory (default: <repo_root>/Reporting/HTML)
+            open_browser: open report in browser
+        Returns:
+            Absolute path (string) to the generated HTML report.
+        """
         import plotly.io as pio
-        import os
+        from pathlib import Path
         import webbrowser
-        
+
+        # --- resolve output dir robustly (independent from cwd) ---
+        repo_root = Path(__file__).resolve().parents[1]  # .../Reporting/plotter.py -> repo root
+        out_dir = Path(output_dir) if output_dir is not None else (repo_root / "Reporting" / "HTML")
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # If user passes a path in filename, respect it; otherwise put it under out_dir
+        filename_path = Path(filename)
+        report_path = filename_path if filename_path.is_absolute() or filename_path.parent != Path(".") else (out_dir / filename_path)
+
         sections_html = []
         plotly_included = False
         plot_counter = 0
-        
-        # Video section
-        if video_folder and os.path.isdir(video_folder):
-            video_files = sorted([f for f in os.listdir(video_folder) if f.lower().endswith('.mp4')])
-            if video_files:
-                video_cells = []
-                for video_file in video_files:
-                    video_path = os.path.abspath(os.path.join(video_folder, video_file))
-                    video_name = os.path.splitext(video_file)[0]
-                    video_html = f'''<h4>{video_name}</h4><video controls loop muted playsinline><source src="file://{video_path}" type="video/mp4"></video>'''
-                    video_cells.append(f'<div class="cell">{video_html}</div>')
-                
-                sections_html.append(f'''
-                <section>
-                    <h2>Video</h2>
-                    <div class="grid">
-                        {"".join(video_cells)}
-                    </div>
-                </section>''')
-        
-        # Task Performance section
+
+        # --- Video section ---
+        if video_folder:
+            video_dir = Path(video_folder)
+            if video_dir.is_dir():
+                video_files = sorted([p for p in video_dir.iterdir() if p.suffix.lower() == ".mp4"])
+                if video_files:
+                    video_cells = []
+                    for video_file in video_files:
+                        video_name = video_file.stem
+                        # Use absolute file:// path (works reliably locally)
+                        video_uri = video_file.resolve().as_uri()
+                        video_html = (
+                            f"<h4>{video_name}</h4>"
+                            f"<video controls loop muted playsinline>"
+                            f"<source src='{video_uri}' type='video/mp4'>"
+                            f"</video>"
+                        )
+                        video_cells.append(f"<div class='cell'>{video_html}</div>")
+
+                    sections_html.append(f"""
+                    <section>
+                        <h2>Video</h2>
+                        <div class="grid">
+                            {''.join(video_cells)}
+                        </div>
+                    </section>""")
+
+        # --- Task Performance section ---
         if task_figs:
             task_cells = []
             for fig in task_figs:
                 div_id = f"plot-{plot_counter}"
                 plot_counter += 1
-                include_js = 'cdn' if not plotly_included else False
-                if include_js == 'cdn':
+                include_js = "cdn" if not plotly_included else False
+                if include_js == "cdn":
                     plotly_included = True
-                html = pio.to_html(fig, full_html=False, include_plotlyjs=include_js, include_mathjax=False, div_id=div_id, config={'responsive': True})
-                task_cells.append(f'<div class="cell">{html}</div>')
-            
-            sections_html.append(f'''
+
+                html = pio.to_html(
+                    fig,
+                    full_html=False,
+                    include_plotlyjs=include_js,
+                    include_mathjax=False,
+                    div_id=div_id,
+                    config={"responsive": True},
+                )
+                task_cells.append(f"<div class='cell'>{html}</div>")
+
+            sections_html.append(f"""
             <section>
                 <h2>Task Performance</h2>
                 <div class="grid">
-                    {"".join(task_cells)}
-            </div>
-            </section>''')
-        
-        # Solver Performance section
+                    {''.join(task_cells)}
+                </div>
+            </section>""")
+
+        # --- Solver Performance section ---
         if solver_figs:
             solver_cells = []
             for fig in solver_figs:
                 div_id = f"plot-{plot_counter}"
                 plot_counter += 1
-                include_js = 'cdn' if not plotly_included else False
-                if include_js == 'cdn':
+                include_js = "cdn" if not plotly_included else False
+                if include_js == "cdn":
                     plotly_included = True
-                html = pio.to_html(fig, full_html=False, include_plotlyjs=include_js, include_mathjax=False, div_id=div_id, config={'responsive': True})
-                solver_cells.append(f'<div class="cell">{html}</div>')
-            
-            sections_html.append(f'''
+
+                html = pio.to_html(
+                    fig,
+                    full_html=False,
+                    include_plotlyjs=include_js,
+                    include_mathjax=False,
+                    div_id=div_id,
+                    config={"responsive": True},
+                )
+                solver_cells.append(f"<div class='cell'>{html}</div>")
+
+            sections_html.append(f"""
             <section>
                 <h2>Solver Performance</h2>
                 <div class="grid">
-                    {"".join(solver_cells)}
+                    {''.join(solver_cells)}
                 </div>
-            </section>''')
-        
+            </section>""")
+
         html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title}</title>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
-    <style>
-        * {{ box-sizing: border-box; }}
-        body {{ margin: 0; padding: 24px; background: #fafafa; font-family: system-ui, sans-serif; }}
-        h1 {{ font-size: 24px; margin: 0 0 24px 0; }}
-        section {{ margin-bottom: 32px; }}
-        h2 {{ font-size: 18px; margin: 0 0 12px 0; }}
-        h4 {{ font-size: 13px; margin: 0 0 8px 0; font-weight: 500; }}
-        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 12px; }}
-        .cell {{ background: #fff; border-radius: 6px; padding: 12px; min-width: 0; }}
-        .cell .js-plotly-plot, .cell .plotly-graph-div {{ width: 100% !important; }}
-        video {{ width: 100%; border-radius: 4px; display: block; }}
-    </style>
-</head>
-<body>
-    <h1>{title}</h1>
-    {"".join(sections_html)}
-    <script>
-        function resizePlots() {{
-            document.querySelectorAll('.js-plotly-plot').forEach(p => Plotly.Plots.resize(p));
-        }}
-        window.addEventListener('resize', resizePlots);
-        window.addEventListener('load', resizePlots);
-    </script>
-</body>
-</html>"""
-        
-        filepath = os.path.abspath(filename)
-        with open(filepath, "w") as f:
-            f.write(html_content)
-        
-        webbrowser.open(f"file://{filepath}")
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+        <style>
+            * {{ box-sizing: border-box; }}
+            body {{ margin: 0; padding: 24px; background: #fafafa; font-family: system-ui, sans-serif; }}
+            h1 {{ font-size: 24px; margin: 0 0 24px 0; }}
+            section {{ margin-bottom: 32px; }}
+            h2 {{ font-size: 18px; margin: 0 0 12px 0; }}
+            h4 {{ font-size: 13px; margin: 0 0 8px 0; font-weight: 500; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 12px; }}
+            .cell {{ background: #fff; border-radius: 6px; padding: 12px; min-width: 0; }}
+            .cell .js-plotly-plot, .cell .plotly-graph-div {{ width: 100% !important; }}
+            video {{ width: 100%; border-radius: 4px; display: block; }}
+        </style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        {''.join(sections_html)}
+        <script>
+            function resizePlots() {{
+                document.querySelectorAll('.js-plotly-plot').forEach(p => Plotly.Plots.resize(p));
+            }}
+            window.addEventListener('resize', resizePlots);
+            window.addEventListener('load', resizePlots);
+        </script>
+    </body>
+    </html>"""
+
+        report_path = report_path.resolve()
+        report_path.write_text(html_content, encoding="utf-8")
+
+        if open_browser:
+            webbrowser.open(report_path.as_uri())
+
+        return str(report_path)
+
 
     def show(self, fig: go.Figure):
         """Show figure in browser."""

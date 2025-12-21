@@ -3,6 +3,10 @@ import numpy as np
 import uuid
 import yaml
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosSim
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]  
+CONFIG_PATH = PROJECT_ROOT / "config" / "mpc.yaml"
 
 class MPC:
     
@@ -24,14 +28,13 @@ class MPC:
                               EE frame. Can be a length-3 iterable or a 3x1 CasADi vector.
         """
 
-        with open("config/mpc.yaml", "r") as f:
+        with CONFIG_PATH.open("r") as f:
             cfg = yaml.safe_load(f)
 
         P_cfg = cfg["lqr_terminal"]["P"]
-        self.P = np.array(P_cfg["values"], dtype=float)  
-        print(f"P size: {self.P.shape}")
+        self.P = np.array(P_cfg["values"], dtype=float)         
         self.alpha = cfg["lqr_terminal"]["alpha"]
-        print(f"alpha {self.alpha}")
+
         self.surface = surface 
         self.surface_pos_world = surface.get_position() 
         self.surface_rpy_world = surface.get_orientation_rpy() 
@@ -66,11 +69,11 @@ class MPC:
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         # Use unique directory per instance to prevent caching conflicts
-        self.ocp.code_export_directory = f'c_generated_code_ocp_{self._instance_id}'
+        export_dir = PROJECT_ROOT / "Infrastructure" / "acados" / "c_generated" / f"c_generated_code_ocp_{self._instance_id}"
+        self.ocp.code_export_directory = str(export_dir)
+
 
         self.ocp.solver_options.integrator_type = 'DISCRETE'
-        self.ocp.solver_options.sim_method_num_stages = 4
-        self.ocp.solver_options.sim_method_num_steps = 1
 
         # set prediction horizon
         self.ocp.solver_options.N_horizon = N_horizon
@@ -170,5 +173,9 @@ class MPC:
         '''
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
+
+    def finalize_solver(self):
+        """Creates the AcadosOcpSolver. This should be called after all options are set."""
         # Use unique JSON file per instance
-        self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados_ocp_{self._instance_id}.json')
+        self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados-ocp-json/acados_ocp_{self._instance_id}.json')
+        return self

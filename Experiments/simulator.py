@@ -1,10 +1,14 @@
-from loader import UrdfLoader as urdf
-from visualizer import MeshCatVisualizer as robot_visualizer
-from prediction_model import SixDofRobot as prediction_robot_6dof
-from simulation_model import Robot as simulation_robot_6dof
-from trajectory_optimizer import MPC as model_predictive_control
-from surface import Surface
-from plotter import Plotter
+from Infrastructure.loader import UrdfLoader as urdf
+from Infrastructure.visualizer import MeshCatVisualizer as robot_visualizer
+
+from models.prediction_model import SixDofRobot as prediction_robot_6dof
+from models.simulation_model import Robot as simulation_robot_6dof
+
+from mpc.trajectory_optimizer import MPC as model_predictive_control
+from mpc.surface import Surface
+
+from Reporting.plotter import Plotter
+
 import numpy as np
 from itertools import product
 import time

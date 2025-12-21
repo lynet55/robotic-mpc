@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import yaml
 from scipy.linalg import solve_discrete_are
 from models.prediction_model import SixDofRobot
-from loader import UrdfLoader as urdf
+from Infrastructure.loader import UrdfLoader as urdf
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
