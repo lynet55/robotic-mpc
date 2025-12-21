@@ -1,12 +1,13 @@
 import casadi as ca
 import numpy as np
 import uuid
+import yaml
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosSim
 
 class MPC:
     
-    def __init__(self, surface, initial_state, model, N_horizon, Tf, 
-                 px_ref= 0.40, vy_ref=-0.40):
+    def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max,
+                 px_ref= 0.40, vy_ref=-0.20):
         """
         Initialize MPC controller with explicit dependencies.
         
@@ -22,6 +23,13 @@ class MPC:
             translation_ee_t: Translation from EE origin to task origin, expressed in the
                               EE frame. Can be a length-3 iterable or a 3x1 CasADi vector.
         """
+
+        with open("config/mpc.yaml", "r") as f:
+            cfg = yaml.safe_load(f)
+
+        P_cfg = cfg["lqr_terminal"]["P"]
+        self.P = np.array(P_cfg["values"], dtype=float)         
+        self.alpha = cfg["lqr_terminal"]["alpha"]
 
         self.surface = surface 
         self.surface_pos_world = surface.get_position() 
@@ -52,16 +60,14 @@ class MPC:
         self.ocp.solver_options.nlp_solver_type = 'SQP' # [SQP, 'SQP_RTI', 'DDP','SQP_WITH_FEASIBLE_QP']
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # ['GAUSS_NEWTON', 'EXACT']
 
-        self.ocp.solver_options.print_level = 0 
+        self.ocp.solver_options.print_level = 2 
 
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         # Use unique directory per instance to prevent caching conflicts
         self.ocp.code_export_directory = f'acados-c-generated/c_generated_code_ocp_{self._instance_id}'
 
-        self.ocp.solver_options.integrator_type = 'ERK'
-        self.ocp.solver_options.sim_method_num_stages = 4
-        self.ocp.solver_options.sim_method_num_steps = 1
+        self.ocp.solver_options.integrator_type = 'DISCRETE'
 
         # set prediction horizon
         self.ocp.solver_options.N_horizon = N_horizon
@@ -70,7 +76,7 @@ class MPC:
         # MODEL 
         self.acados_model = model.acados_model
         self.y = model.y
-        self.ocp.model =self.acados_model
+        self.ocp.model =self.acados_model 
         # Use unique model name per instance to prevent acados from reusing cached solver
         self.ocp.model.name = f'six_dof_robot_{self._instance_id}'
 
@@ -78,8 +84,7 @@ class MPC:
         self.nu = self.acados_model.u.rows()
         self.ny = self.nx + self.nu
 
-        # OUTPUT 
-        n_dof = self.nu 
+        # OUTPUT  
         p_task = self.y[0:3]
         p_task_x = p_task[0]
         p_task_y = p_task[1]
@@ -147,6 +152,22 @@ class MPC:
         self.ocp.constraints.ubu = np.array([q_dot_ref_max] * 6)
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
+        # State input bound (joint rotation)
+        self.ocp.constraints.lbx = qmin
+        self.ocp.constraints.ubx = qmax
+        self.ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5])
+
+        # Terminal constraint (Recursive Feasibility)
+        '''
+        P = ca.DM(self.P)
+        x = self.acados_model.x
+
+        h_e = ca.mtimes([x.T, P, x])  # scalare
+
+        self.ocp.model.con_h_expr_e = h_e
+        self.ocp.constraints.lh_e = np.array([-1e16])
+        self.ocp.constraints.uh_e = np.array([self.alpha])      # x'Px <= alpha
+        '''
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
 
