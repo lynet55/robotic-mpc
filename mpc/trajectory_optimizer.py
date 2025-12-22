@@ -27,7 +27,6 @@ class MPC:
             translation_ee_t: Translation from EE origin to task origin, expressed in the
                               EE frame. Can be a length-3 iterable or a 3x1 CasADi vector.
         """
-
         with CONFIG_PATH.open("r") as f:
             cfg = yaml.safe_load(f)
 
@@ -177,5 +176,11 @@ class MPC:
     def finalize_solver(self):
         """Creates the AcadosOcpSolver. This should be called after all options are set."""
         # Use unique JSON file per instance
-        self.solver = AcadosOcpSolver(self.ocp, json_file=f'acados-ocp-json/acados_ocp_{self._instance_id}.json')
+        json_dir = PROJECT_ROOT / "Infrastructure" / "acados" / "json"
+        json_dir.mkdir(exist_ok=True, parents=True)
+
+        self.solver = AcadosOcpSolver(
+            self.ocp,
+            json_file=str(json_dir / f"acados_ocp_{self._instance_id}.json")
+        )
         return self

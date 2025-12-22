@@ -21,7 +21,8 @@ class Simulator:
     def __init__(self, 
                  # Core simulation parameters
                  dt, simulation_time, prediction_horizon,
-                 q_0, qdot_0, wcv,
+                 q_0, qdot_0, wcv, q_min, q_max, 
+                 qdot_min, qdot_max,
                  
                  # Surface geometry
                  surface_limits, surface_origin, surface_orientation_rpy,
@@ -42,6 +43,10 @@ class Simulator:
         self.q_0 = q_0
         self.qdot_0 = qdot_0
         self.wcv = wcv
+        self.q_min = q_min
+        self.q_max = q_max
+        self.qdot_min = qdot_min
+        self.qdot_max = qdot_max
         self.initial_state = np.hstack((self.q_0, self.qdot_0))
         
         self.px_ref = px_ref
@@ -79,8 +84,10 @@ class Simulator:
         
         self.prediction_model = prediction_robot_6dof(
             urdf_loader=self.robot_loader,
+            Ts=self.dt,
             Wcv=self.wcv
         )
+        self.translation = self.prediction_model.translation
         
         # Create MPC
         self.mpc = model_predictive_control(
@@ -89,6 +96,10 @@ class Simulator:
             model=self.prediction_model,
             N_horizon=self.prediction_horizon,
             Tf=self.dt*self.prediction_horizon,
+            qmin=self.q_min,
+            qmax=self.q_max,
+            dq_min=self.qdot_min,
+            dq_max = self.qdot_max,
             px_ref=self.px_ref,
             vy_ref=self.vy_ref
         )
@@ -97,6 +108,7 @@ class Simulator:
         if solver_options:
             self._apply_solver_options(solver_options)
         
+        # Setup solver
         self.mpc.finalize_solver()
         
         # Setup visualization
@@ -134,7 +146,7 @@ class Simulator:
         ee_position_0 = self.simulation_model.ee_position(0)
         self.scene.add_triad(
             position=ee_position_0,
-            orientation_rpy=self.simulation_model.ee_orientation(0),
+            orientation_rpy=self.simulation_model.ee_orientation_euler(0),
             path="frames/end_effector_frame",
             scale=0.2,
             line_width=2.0
@@ -164,22 +176,23 @@ class Simulator:
         
         for i in range(self.Nsim):
             start_time = time.time()
-            current_state = self.simulation_model.state(i)
+            # State Feedback
+            current_state = self.simulation_model.state(i) 
 
             # MPC solve
             mpc_start_time = time.time()
             self.mpc.solver.set(0, 'lbx', current_state)
             self.mpc.solver.set(0, 'ubx', current_state)
-            status = self.mpc.solver.solve()
+            status = self.mpc.solver.solve() 
             u = self.mpc.solver.get(0, "u")
             self.mpc_time[i] = time.time() - mpc_start_time
             
             # Store solver stats
             self.solver_status[i] = status
-            self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter')
-            self.residuals[i, :] = self.mpc.solver.get_residuals()
-            self.solver_time_tot[i] = self.mpc.solver.get_stats('time_tot')
-            self.cost_history[i] = self.mpc.solver.get_cost()
+            self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter') # number of SQP iterations
+            self.residuals[i, :] = self.mpc.solver.get_residuals() # returns [res_stat, res_eq, res_ineq, res_comp].  
+            self.solver_time_tot[i] = self.mpc.solver.get_stats('time_tot') # total CPU time previous call
+            self.cost_history[i] = self.mpc.solver.get_cost() # cost value of the current solution
             
             # Integration
             integration_start_time = time.time()
@@ -217,71 +230,74 @@ class Simulator:
         
         self.scene.update_triad("frames/end_effector_frame", 
                                position=ee_pos, 
-                               orientation_rpy=self.simulation_model.ee_orientation(step+1))
+                               orientation_rpy=self.simulation_model.ee_orientation_euler(step+1))
         self.scene.update_line(path="lines/ee_trajectory", points=self.traj_array)
     
     @cached_property
     def errors(self):
-        """
-        Compute all tracking errors in one pass (cached).
-        
-        Returns:
-            dict with keys: e1, e2, e3, e4, e5, z_surface
-            - e1: Surface tracking error (z_surface - z_ee)
-            - e2: Orientation alignment error (1 - n^T @ rot_z)
-            - e3: Orientation cross error (n^T @ rot_y)
-            - e4: X-position tracking error (px_ref - px)
-            - e5: Y-velocity tracking error (vy_ref - vy)
-            - z_surface: Surface height at each step
-        """
         if not self._data_computed:
             raise RuntimeError("Must call run() before accessing errors")
-        
-        # Transform to task space
-        R_ee_t = np.array([
-            [1.0,  0.0,  0.0],
-            [0.0, -1.0,  0.0],
-            [0.0,  0.0, -1.0],
-        ])
-        ee_xyz = self.simulation_model._ee_pose_log[:3]
-        ee_task = R_ee_t @ ee_xyz + np.array([0.0, 0.0, 1.0])[:, np.newaxis]
-        n_steps = ee_task.shape[1]
-        
+
+        # Logged EE pose in WORLD: [p(3); R_flat(9)] for each step
+        p_ee_all = self.simulation_model._ee_pose_log[:3, :]      # (3, N+1)
+        R_flat_all = self.simulation_model._ee_pose_log[3:12, :]  # (9, N+1)
+
+        n_steps = p_ee_all.shape[1]
+
         e1 = np.zeros(n_steps)
         e2 = np.zeros(n_steps)
         e3 = np.zeros(n_steps)
         e4 = np.zeros(n_steps)
         e5 = np.zeros(n_steps)
         z_surface = np.zeros(n_steps)
-        
-        for i in range(n_steps):
-            ee_x = ee_task[0, i]
-            ee_y = ee_task[1, i]
-            ee_z = ee_task[2, i]
-            
-            ee_vy = self.simulation_model.ee_velocity(i)[1]
-            n = self.surface.get_normal_vector_casadi()(ee_x, ee_y)
-            ee_rot_vector = self.simulation_model.ee_orientation(i)
 
-            rot_z = np.array([0.0, 0.0, ee_rot_vector[2]])
-            rot_y = np.array([0.0, ee_rot_vector[1], 0.0])
-            
-            z_surf = self.surface.get_point_on_surface(ee_x, ee_y)
-            e1[i] = z_surf - ee_z
-            e2[i] = 1 - (n.T @ rot_z)
-            e3[i] = np.array([1.0, 0.0, 0.0]).T @ rot_y
-            e4[i] = self.px_ref - ee_x
-            e5[i] = self.vy_ref - ee_vy
+        # EE -> task constant rotation
+        R_ee_t = np.array([
+            [1.0,  0.0,  0.0],
+            [0.0, 1.0,  0.0],
+            [0.0,  0.0, 1.0],
+        ])
+
+        t_ee = np.asarray(self.translation).reshape(3,)  # translation expressed in EE frame
+
+        n_fun = self.surface.get_normal_vector_casadi()
+        S_fun = self.surface.get_surface_function()
+
+        for i in range(n_steps):
+            p_ee = p_ee_all[:, i]                 # (3,)
+            R_w_ee = R_flat_all[:, i].reshape(3,3)  # row-wise (3,3)
+
+            # Task frame in WORLD
+            R_w_t = R_w_ee @ R_ee_t
+            p_t = p_ee + R_w_ee @ t_ee
+
+            # task axes expressed in WORLD (columns!)
+            R_task_y = R_w_t[:, 1]
+            R_task_z = R_w_t[:, 2]
+
+            # task position
+            p_task_x, p_task_y, p_task_z = p_t
+
+            # surface normal in WORLD at (x,y) task coords
+            n = np.array(n_fun(p_task_x, p_task_y)).reshape(3,)
+
+            # task constraints
+            z_surf = float(S_fun(p_task_x, p_task_y))
+            g1 = z_surf - p_task_z              # S(x,y) - z
+            g2 = float(n @ R_task_z)            # alignment
+            g3 = float(R_task_y[0])             # x-component of task y-axis
+            g4 = p_task_x
+            g5 = float(self.simulation_model.ee_velocity(i)[1])  # v_y in WORLD (or transform if you want v_t_y!)
+
+            e1[i] = g1
+            e2[i] = 1.0 - g2
+            e3[i] = g3
+            e4[i] = self.px_ref - g4
+            e5[i] = self.vy_ref - g5
             z_surface[i] = z_surf
-        
-        return {
-            'e1': e1,
-            'e2': e2,
-            'e3': e3,
-            'e4': e4,
-            'e5': e5,
-            'z_surface': z_surface
-        }
+
+        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'z_surface': z_surface}
+
     
     @cached_property
     def metrics(self):
@@ -303,7 +319,8 @@ class Simulator:
         rmse = {}
         for key in ['e1', 'e2', 'e3', 'e4']:
             error_signal = errors[key]
-            rmse[key] = np.sqrt(np.sum(error_signal**2) / self.simulation_time)
+            rmse[key] = np.sqrt(np.sum(error_signal**2) * self.dt / self.simulation_time)
+
         
         # Calculate ITSE for all errors
         itse = {}
