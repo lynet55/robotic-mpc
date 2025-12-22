@@ -20,7 +20,7 @@ class MeshCatVisualizer:
             urdf_loader.collision_model,
             urdf_loader.visual_model
         )
-        self._viz.initViewer(open=False)
+        self._viz.initViewer(open=True)
         self._viz.loadViewerModel()        
         self._viz.display(self._q)
         

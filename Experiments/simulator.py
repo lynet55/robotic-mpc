@@ -31,7 +31,7 @@ class Simulator:
                  surface_coeffs=None,
                  solver_options=None,
                  px_ref=0.40,
-                 vy_ref=-0.40,
+                 vy_ref=-0.20,
                  scene=True):
         
         # Store all parameters
@@ -87,7 +87,7 @@ class Simulator:
             Ts=self.dt,
             Wcv=self.wcv
         )
-        self.translation = self.prediction_model.translation
+        self.translation = self.prediction_model.translation_array
         
         # Create MPC
         self.mpc = model_predictive_control(
@@ -108,6 +108,10 @@ class Simulator:
         if solver_options:
             self._apply_solver_options(solver_options)
         
+        print("qp_solver =", self.mpc.ocp.solver_options.qp_solver)
+        print("nlp_solver_type =", self.mpc.ocp.solver_options.nlp_solver_type)
+
+
         # Setup solver
         self.mpc.finalize_solver()
         
@@ -306,8 +310,8 @@ class Simulator:
         
         Returns:
             dict with keys:
-            - rmse: dict with e1, e2, e3, e4
-            - itse: dict with e1, e2, e3, e4
+            - rmse: dict with e1, e2, e3, e4, e5
+            - itse: dict with e1, e2, e3, e4, e5
             - max_combined_rmse: maximum combined error across all constraints
         """
         if not self._data_computed:
@@ -317,14 +321,14 @@ class Simulator:
         
         # Calculate RMSE for all errors
         rmse = {}
-        for key in ['e1', 'e2', 'e3', 'e4']:
+        for key in ['e1', 'e2', 'e3', 'e4', 'e5']:
             error_signal = errors[key]
             rmse[key] = np.sqrt(np.sum(error_signal**2) * self.dt / self.simulation_time)
 
         
         # Calculate ITSE for all errors
         itse = {}
-        for key in ['e1', 'e2', 'e3', 'e4']:
+        for key in ['e1', 'e2', 'e3', 'e4', 'e5']:
             error_signal = errors[key]
             num_steps = len(error_signal)
             time_vector = np.arange(num_steps) * self.dt
@@ -364,6 +368,7 @@ class Simulator:
             'res_ineq': self.residuals[:, 2],
             'res_comp': self.residuals[:, 3],
             'cost_history': self.cost_history,
+            'sqp_iterations': self.sqp_iter,
             'total_sqp_iterations': int(np.sum(self.sqp_iter)),
             'avg_sqp_iterations': float(np.mean(self.sqp_iter)),
             'num_failures': int(np.sum(self.solver_status != 0)),
@@ -455,10 +460,12 @@ class Simulator:
             'rmse_e2': m['rmse']['e2'],
             'rmse_e3': m['rmse']['e3'],
             'rmse_e4': m['rmse']['e4'],
+            'rmse_e5': m['rmse']['e5'],
             'itse_e1': m['itse']['e1'],
             'itse_e2': m['itse']['e2'],
             'itse_e3': m['itse']['e3'],
             'itse_e4': m['itse']['e4'],
+            'itse_e5': m['itse']['e5'],
             'max_combined_rmse': m['max_combined_rmse'],
             # Solver performance
             'total_sqp_iterations': s['total_sqp_iterations'],
@@ -551,7 +558,10 @@ class SimulationManager:
                 
                 # Generate name
                 if name_template:
-                    name = name_template(dict(zip(param_paths, values)), coeff_idx)
+                    try:
+                        name = name_template(dict(zip(param_paths, values)), coeff_idx)
+                    except TypeError:
+                        name = name_template(dict(zip(param_paths, values)))
                 else:
                     param_str = '_'.join([f"{p.split('.')[-1]}={v}" for p, v in zip(param_paths, values)])
                     if coeff_set is not None:
@@ -605,14 +615,18 @@ if __name__ == "__main__":
     # Base configuration
     base_config = {
         'dt': 0.001,
-        'simulation_time': 1.0,
+        'simulation_time': 2.0,
         'prediction_horizon': 200,
         'surface_limits': ((-2, 2), (-2, 2)),
         'surface_origin': np.array([0.0, 0.0, 0.0]),
         'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
         'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
         'qdot_0': np.array([2, 2, 2, 2, 2, 2]),
-        'wcv': np.array([5, 10, 15, 20, 25, 35]),
+        'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76], dtype=float),
+        'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
+        'q_max': np.array([+2*np.pi, +2*np.pi, +np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
+        'qdot_min': np.array([-np.pi, -np.pi, -np.pi, -np.pi, -np.pi, -np.pi], dtype=float),
+        'qdot_max': np.array([np.pi, np.pi, np.pi, np.pi, np.pi, np.pi], dtype=float),
         'scene': True
     }
     

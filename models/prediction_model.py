@@ -20,6 +20,7 @@ class SixDofRobot:
             self.translation = ca.vertcat(translation_ee_t[0], 
                                           translation_ee_t[1], 
                                           translation_ee_t[2])
+            self.translation_array = translation_ee_t
         else:
             self.translation = translation_ee_t
         
