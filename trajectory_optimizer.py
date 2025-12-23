@@ -6,8 +6,9 @@ from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosS
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  
-CONFIG_PATH = PROJECT_ROOT / "config" / "mpc.yaml"
-
+CONFIG_PATH = PROJECT_ROOT / "robotic-mpc" / "config" / "mpc.yaml"
+json_dir = PROJECT_ROOT / "robotic-mpc" / "json_solver"
+code_dir = PROJECT_ROOT / "robotic-mpc" / "code_gen"
 class MPC:
     
     def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max,
@@ -62,17 +63,19 @@ class MPC:
         # SET OCP OPTIONS
         self.ocp.solver_options.nlp_solver_type = 'SQP' # [SQP, 'SQP_RTI', 'DDP','SQP_WITH_FEASIBLE_QP']
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # ['GAUSS_NEWTON', 'EXACT']
-        self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
+        #self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
         self.ocp.solver_options.print_level = 2 
 
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         # Use unique directory per instance to prevent caching conflicts
-        export_dir = PROJECT_ROOT / "Infrastructure" / "acados" / "c_generated" / f"c_generated_code_ocp_{self._instance_id}"
-        self.ocp.code_export_directory = str(export_dir)
-
+        self.ocp.code_export_directory = str(code_dir / f'rated_code_ocp_{self._instance_id}')
 
         self.ocp.solver_options.integrator_type = 'DISCRETE'
+
+        self.ocp.solver_options.nlp_solver_warm_start_first_qp = True
+        self.ocp.solver_options.qp_solver_warm_start = 2
+
 
         # set prediction horizon
         self.ocp.solver_options.N_horizon = N_horizon
@@ -176,7 +179,6 @@ class MPC:
     def finalize_solver(self):
         """Creates the AcadosOcpSolver. This should be called after all options are set."""
         # Use unique JSON file per instance
-        json_dir = PROJECT_ROOT / "Infrastructure" / "acados" / "json"
         json_dir.mkdir(exist_ok=True, parents=True)
 
         self.solver = AcadosOcpSolver(

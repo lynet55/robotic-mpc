@@ -12,4 +12,4 @@ export ACADOS_SOURCE_DIR=/root/robotic-mpc/acados
 
 
 
-python -m Experiments.main
+python simulator.py

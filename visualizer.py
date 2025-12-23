@@ -21,7 +21,7 @@ class MeshCatVisualizer:
             urdf_loader.visual_model
         )
         self._viz.initViewer(open=True)
-        self._viz.loadViewerModel()        
+        self._viz.loadViewerModel()
         self._viz.display(self._q)
         
         # Hide background by default
