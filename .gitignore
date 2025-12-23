@@ -6,3 +6,5 @@ acados-c-generated
 acados-ocp-json
 run.sh
 acados_ocp.json
+json_solver
+code_gen

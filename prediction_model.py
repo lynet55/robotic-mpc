@@ -17,12 +17,12 @@ class SixDofRobot:
         self._n_dof = self._cmodel.nq
 
         if isinstance(translation_ee_t, (list, np.ndarray)):
-            self.translation = ca.vertcat(translation_ee_t[0], 
+            self.c_translation = ca.vertcat(translation_ee_t[0], 
                                           translation_ee_t[1], 
                                           translation_ee_t[2])
-            self.translation_array = translation_ee_t
-        else:
             self.translation = translation_ee_t
+        else:
+            self.c_translation = translation_ee_t
         
         # Get end-effector frame ID from both models
         # Use 'tool0' as the end-effector frame (standard UR5 frame)
@@ -265,7 +265,7 @@ class SixDofRobot:
 
         R_w_t = R_w_ee @ R_ee_t
 
-        p_t = p_ee + R_w_ee @ self.translation
+        p_t = p_ee + R_w_ee @ self.c_translation
 
         R_w_t_flat = ca.vertcat(
             R_w_t[0, 0], R_w_t[1, 0], R_w_t[2, 0],
