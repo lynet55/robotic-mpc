@@ -1,10 +1,13 @@
-acados
 __pycache__
 .DS_Store
 .vscode
-acados-c-generated
-acados-ocp-json
 run.sh
 acados_ocp.json
-json_solver
-code_gen
+
+# Ignore folder contents but keep folders (with .gitkeep)
+acados/*
+!acados/.gitkeep
+code_gen/*
+!code_gen/.gitkeep
+json_solver/*
+!json_solver/.gitkeep

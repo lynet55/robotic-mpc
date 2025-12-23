@@ -1,5 +1,5 @@
-from Experiments.simulator import SimulationManager
-from Reporting.plotter import Plotter
+from simulator import SimulationManager
+from plotter import Plotter
 
 import numpy as np
 
