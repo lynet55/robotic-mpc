@@ -31,8 +31,8 @@ class Robot:
         self._t = 0
         self.z[:, 0] = self._z0
         self.u[:, 0] = self._u0
-        self._ee_pose_log[:, 0], self._ee_rpy_log[:, 0] = self.forward_kinematics(self._z0[:6])
-        self._ee_velocity_log[:, 0] = self.diff_kinematic(self._z0[:6], self._z0[6:])
+        self._ee_pose_log[:, 0], self._ee_rpy_log[:, 0] = self._forward_kinematics(self._z0[:6])
+        self._ee_velocity_log[:, 0] = self._diff_kinematic(self._z0[:6], self._z0[6:])
 
         self._integration_method_name = integration_method
 
@@ -57,7 +57,7 @@ class Robot:
     def N(self):
         return self._N
 
-    def forward_kinematics(self, q):
+    def _forward_kinematics(self, q):
         pin.forwardKinematics(self._model, self._data, q)
         pin.updateFramePlacements(self._model, self._data)
         R = self._data.oMf[self._fee].rotation
@@ -70,7 +70,8 @@ class Robot:
         rpy  = np.array([roll, pitch, yaw])
         return pose, rpy
     
-    def diff_kinematic(self, q, qdot):
+    
+    def _diff_kinematic(self, q, qdot):
         # The WORLD frame is retrieved by Pinocchio from the urdf, where by default is set as coincident with the robot base frame
         J = pin.computeFrameJacobian(self._model, self._data, q, self._fee, pin.ReferenceFrame.WORLD)
         return J @ qdot  # [vx, vy, vz, wx, wy, wz]
@@ -85,8 +86,8 @@ class Robot:
         next_state = self._integration_method(z_k, u_k, self._dt)
         self.z[:, t + 1] = next_state
         self.u[:, t + 1] = u_k
-        self._ee_pose_log[:, t + 1], self._ee_rpy_log[:, t + 1] = self.forward_kinematics(next_state[:6])
-        self._ee_velocity_log[:, t + 1] = self.diff_kinematic(next_state[:6], next_state[6:])
+        self._ee_pose_log[:, t + 1], self._ee_rpy_log[:, t + 1] = self._forward_kinematics(next_state[:6])
+        self._ee_velocity_log[:, t + 1] = self._diff_kinematic(next_state[:6], next_state[6:])
         return next_state
 
     def _euler_update(self, z_k, u_k, dt):
@@ -114,6 +115,17 @@ class Robot:
         k3 = self._continuos_time_state(z_k + 0.5 * dt * k2, u_k)
         k4 = self._continuos_time_state(z_k + dt * k3, u_k)
         return z_k + (dt / 6) * k1 + (dt / 3) * k2 + (dt / 3) * k3 + (dt / 6) * k4
+    
+    def simulate_output(self):
+        pose = np.zeros((12,self._N+1), dtype=np.float64)
+        v_ee = np.zeros((6,self._N+1), dtype=np.float64)
+
+        for k in range (0,self._N+1):
+            q = self.z[:6,k]; qdot = self.z[6:,k]
+            pose[:,k], _ = self._forward_kinematics(q)
+            v_ee[:,k] = self._diff_kinematic(q, qdot)
+
+        return pose, v_ee
 
     def get_state(self) -> FloatArray:
         return self.z[:, -1]

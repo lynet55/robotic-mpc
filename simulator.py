@@ -5,7 +5,6 @@ from simulation_model import Robot as simulation_robot_6dof
 
 from trajectory_optimizer import MPC as model_predictive_control
 from surface import Surface
-from plotter import Plotter
 import numpy as np
 from itertools import product
 import time
@@ -27,7 +26,7 @@ class Simulator:
                  # Optional parameters with clear defaults
                  surface_coeffs=None,
                  solver_options=None,
-                 px_ref=-0.40,
+                 px_ref=0.40,
                  vy_ref=-0.20,
                  scene=True):
         
@@ -55,7 +54,7 @@ class Simulator:
         self.sqp_iter = np.zeros(self.Nsim, dtype=int)
         self.solver_status = np.zeros(self.Nsim, dtype=int)
         self.residuals = np.zeros((self.Nsim, 4))
-        self.solver_time_tot = np.zeros(self.Nsim)
+        self.solver_time = np.zeros(self.Nsim)
         self.cost_history = np.zeros(self.Nsim)
         
         # Create surface with coefficients
@@ -84,7 +83,7 @@ class Simulator:
             Ts=self.dt,
             Wcv=self.wcv
         )
-        self.translation = self.prediction_model.translation_array
+        self.translation = self.prediction_model.translation
         
         # Create MPC
         self.mpc = model_predictive_control(
@@ -104,10 +103,6 @@ class Simulator:
         # Apply solver options if provided
         if solver_options:
             self._apply_solver_options(solver_options)
-        
-        print("qp_solver =", self.mpc.ocp.solver_options.qp_solver)
-        print("nlp_solver_type =", self.mpc.ocp.solver_options.nlp_solver_type)
-
 
         # Setup solver
         self.mpc.finalize_solver()
@@ -184,16 +179,16 @@ class Simulator:
             mpc_start_time = time.time()
             self.mpc.solver.set(0, 'lbx', current_state)
             self.mpc.solver.set(0, 'ubx', current_state)
-            status = self.mpc.solver.solve() 
+            status = self.mpc.solver.solve() # solver call
             u = self.mpc.solver.get(0, "u")
             self.mpc_time[i] = time.time() - mpc_start_time
             
             # Store solver stats
-            self.solver_status[i] = status
+            self.solver_status[i] = status # status = 0 is the only one with convergence 
             self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter') # number of SQP iterations
             self.residuals[i, :] = self.mpc.solver.get_residuals() # returns [res_stat, res_eq, res_ineq, res_comp].  
-            self.solver_time_tot[i] = self.mpc.solver.get_stats('time_tot') # total CPU time previous call
-            self.cost_history[i] = self.mpc.solver.get_cost() # cost value of the current solution
+            self.solver_time[i] = self.mpc.solver.get_stats('time_tot') # total CPU time previous call
+            self.cost_history[i] = self.mpc.solver.get_cost() # objective value at the current solution
             
             # Integration
             integration_start_time = time.time()
@@ -240,8 +235,14 @@ class Simulator:
             raise RuntimeError("Must call run() before accessing errors")
 
         # Logged EE pose in WORLD: [p(3); R_flat(9)] for each step
-        p_ee_all = self.simulation_model._ee_pose_log[:3, :]      # (3, N+1)
-        R_flat_all = self.simulation_model._ee_pose_log[3:12, :]  # (9, N+1)
+        p_ee_all = self.simulation_model._ee_pose_log[:3, :]      
+        R_flat_all = self.simulation_model._ee_pose_log[3:12, :] 
+
+
+        # |OUTPUT outside simulation loop|
+        #pose, v_ee = self.simulation_model.simulate_output()
+        #p_ee_all = pose[:3,:]
+        #R_flat_all = pose[:3,:]
 
         n_steps = p_ee_all.shape[1]
 
@@ -250,23 +251,23 @@ class Simulator:
         e3 = np.zeros(n_steps)
         e4 = np.zeros(n_steps)
         e5 = np.zeros(n_steps)
-        z_surface = np.zeros(n_steps)
+        p_task_z_all = np.zeros(n_steps)
 
-        # EE -> task constant rotation
+        # EE - task fixed rotation
         R_ee_t = np.array([
             [1.0,  0.0,  0.0],
             [0.0, 1.0,  0.0],
             [0.0,  0.0, 1.0],
         ])
 
-        t_ee = np.asarray(self.translation).reshape(3,)  # translation expressed in EE frame
+        t_ee = np.asarray(self.translation).reshape(3,)  
 
         n_fun = self.surface.get_normal_vector_casadi()
         S_fun = self.surface.get_surface_function()
 
         for i in range(n_steps):
-            p_ee = p_ee_all[:, i]                 # (3,)
-            R_w_ee = R_flat_all[:, i].reshape(3,3)  # row-wise (3,3)
+            p_ee = p_ee_all[:, i]                 
+            R_w_ee = R_flat_all[:, i].reshape(3,3)  
 
             # Task frame in WORLD
             R_w_t = R_w_ee @ R_ee_t
@@ -295,9 +296,9 @@ class Simulator:
             e3[i] = g3
             e4[i] = self.px_ref - g4
             e5[i] = self.vy_ref - g5
-            z_surface[i] = z_surf
+            p_task_z_all[i] = p_task_z # --> to plot task_z VS surf_z along p_ee_x
 
-        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'z_surface': z_surface}
+        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'p_task_z': p_task_z_all, 'p_ee_x': p_ee_all[0,:]}
 
     
     @cached_property
@@ -365,12 +366,11 @@ class Simulator:
             'res_ineq': self.residuals[:, 2],
             'res_comp': self.residuals[:, 3],
             'cost_history': self.cost_history,
-            'sqp_iterations': self.sqp_iter,
-            'total_sqp_iterations': int(np.sum(self.sqp_iter)),
-            'avg_sqp_iterations': float(np.mean(self.sqp_iter)),
-            'num_failures': int(np.sum(self.solver_status != 0)),
-            'total_solver_time': float(np.sum(self.solver_time_tot)),
-            'max_kkt_residual': float(np.max(kkt_residuals))
+            'total_sqp_iterations': int(np.sum(self.sqp_iter)),      # Negligable
+            'avg_sqp_iterations': float(np.mean(self.sqp_iter)),     # Negligable
+            'num_failures': int(np.sum(self.solver_status != 0)),    # Negligable
+            'total_solver_time': float(np.sum(self.solver_time)),# Negligable
+            'max_kkt_residual': float(np.max(kkt_residuals))         # Negligable (time istant could be added)
         }
     
     @cached_property
@@ -387,13 +387,18 @@ class Simulator:
         total_time = self.mpc_time + self.integration_time
         
         return {
+            # Along simulation [arrays]
             'mpc_time': self.mpc_time,
             'integration_time': self.integration_time,
-            'solver_time_tot': self.solver_time_tot,
-            'total_computation_time': total_time,
+            'solver_time': self.solver_time, # VS mpc_time (should be the almost the same, with solver_time lower)
+            'total_computation_time': total_time,    
+            # Mean along the simulation [scalar]
             'avg_mpc_time': float(np.mean(self.mpc_time)),
+            'avg_solver_time': float(np.mean(self.solver_time)),
             'avg_integration_time': float(np.mean(self.integration_time)),
-            'total_time': float(np.sum(total_time))
+            'avg_total_time': float(np.mean(total_time)),
+            # Sum along the simulation [scalar]
+            'computational_time_sim': float(np.sum(total_time)) # VS simulation time
         }
     
     # =========================================================================
@@ -472,8 +477,9 @@ class Simulator:
             'total_solver_time': s['total_solver_time'],
             # Timing
             'avg_mpc_time': t['avg_mpc_time'],
+            'avg_solver_time': t['avg_solver_time'],
             'avg_integration_time': t['avg_integration_time'],
-            'total_computation_time': t['total_time']
+            'total_computation_time': t['computational_time_sim']
         }
 
 class SimulationManager:
@@ -647,9 +653,13 @@ if __name__ == "__main__":
     
     # Get compact summary for comparison
     summary = sim.get_summary()
-    print(f"\nSummary: Max RMSE={summary['max_combined_rmse']:.6f}, "
-          f"Failures={summary['num_failures']}, "
-          f"Avg MPC time={summary['avg_mpc_time']*1000:.2f}ms")
+    print(f"\nSummary: Max RMSE={summary['max_combined_rmse']:.6f}, \n"
+          f"Failures={summary['num_failures']}, \n"
+          f"Avg MPC time={summary['avg_mpc_time']*1000:.2f}ms, \n"
+          f"Avg plant integration time={summary['avg_integration_time']*1000:.2f}ms, \n"
+          f"Avg solver time={summary['avg_solver_time']*1000:.2f}ms, \n")
+    
+
     
     # Get raw data for plotting
     data = sim.get_data()
@@ -659,6 +669,7 @@ if __name__ == "__main__":
     analysis = sim.get_analysis()
     print(f"Analysis keys: {list(analysis.keys())[:5]}...")  # Show first 5 keys
     
+    '''
     # Batch simulations
     print("\n\n--- Running batch simulations ---")
     manager = SimulationManager(base_config)
@@ -672,4 +683,4 @@ if __name__ == "__main__":
     for r in results:
         s = r['summary']
         print(f"{r['name']:<15} {s['max_combined_rmse']:<12.6f} "
-              f"{s['total_sqp_iterations']:<12} {s['num_failures']:<10}")
+              f"{s['total_sqp_iterations']:<12} {s['num_failures']:<10}")'''
