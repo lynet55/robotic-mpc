@@ -336,8 +336,8 @@ class Simulator:
             itse[key] = np.sum(integrand) * self.dt
         
         # Combined RMSE (maximum across all constraints)
-        e1, e2, e3, e4 = errors['e1'], errors['e2'], errors['e3'], errors['e4']
-        max_combined_rmse = np.max(np.sqrt(e1**2 + e2**2 + e3**2 + e4**2))
+        e1, e2, e3, e4 = errors['e1'], errors['e2'], errors['e3'], errors['e4'], errors['e5']
+        max_combined_rmse = np.max(np.sqrt(e1**2 + e2**2 + e3**2 + e4**2 + e5**2))
         
         return {
             'rmse': rmse,

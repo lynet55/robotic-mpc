@@ -12,12 +12,12 @@ JOINT_ACCELERATION_LIMITS = np.array([10.0, 10.0, 10.0, 10.0, 10.0, 10.0]) # Exa
 
 BASE_PARAMS = {
     'dt': 0.0005,
-    'simulation_time': 2,
+    'simulation_time': 8,
     'surface_limits': ((-2, 2), (-2, 2)),
     'surface_origin': np.array([0.0, 0.0, 0.0]),
     'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
     #surface function coefficients for a paraboloid
-    'qdot_0': np.array([2, 2, 2, 2, 2, 2]),
+    'qdot_0': np.array([0, 0, 0, 0, 0, 0]),
     'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
     'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76]),
     'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
@@ -87,9 +87,10 @@ summaries = [s.get_summary() for s in sims]
 # Grouped bar plot for RMSE comparison
 rmse_data = {
     "$e_1$ (surface)": [sm['rmse_e1'] for sm in summaries],
-    "$e_2$ (x-pos)":   [sm['rmse_e2'] for sm in summaries],
-    "$e_3$ (orient)":  [sm['rmse_e3'] for sm in summaries],
-    "$e_4$ (y-vel)":   [sm['rmse_e4'] for sm in summaries],
+    "$e_2$ (n_alignment)":   [sm['rmse_e2'] for sm in summaries],
+    "$e_3$ (x-alignment)":  [sm['rmse_e3'] for sm in summaries],
+    "$e_4$ (x-pos)":   [sm['rmse_e4'] for sm in summaries],
+    "$e_4$ (y-vel)":   [sm['rmse_e5'] for sm in summaries],
 }
 
 
@@ -104,9 +105,10 @@ fig_rmse = plotter.grouped_bar_plot(
 # Grouped bar plot for ITSE comparison
 itse_data = {
     "$e_1$ (surface)": [sm['itse_e1'] for sm in summaries],
-    "$e_2$ (x-pos)":   [sm['itse_e2'] for sm in summaries],
-    "$e_3$ (orient)":  [sm['itse_e3'] for sm in summaries],
-    "$e_4$ (y-vel)":   [sm['itse_e4'] for sm in summaries],
+    "$e_2$ (n-alignment)":   [sm['itse_e2'] for sm in summaries],
+    "$e_3$ (x-alignment)":  [sm['itse_e3'] for sm in summaries],
+    "$e_4$ (x-pos)":   [sm['itse_e4'] for sm in summaries],
+    "$e_5$ (y-vel)":   [sm['itse_e5'] for sm in summaries],
 }
 fig_itse = plotter.grouped_bar_plot(
     data=itse_data,
@@ -179,8 +181,8 @@ fig_e2 = plotter.generic_plot(
     t, 
     *[s.errors['e2'] for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
-    ylabel="$e_2 \\ [\\text{m}]$", 
-    title="$e_2 = p_{x,\\text{ref}} - p_x$", 
+    ylabel="$e_2$", 
+    title="$e_2 = n^T r_{\\text{ee_z}}", 
     labels=[s.name for s in sims]
 )
 
@@ -189,7 +191,7 @@ fig_e3 = plotter.generic_plot(
     *[s.errors['e3'] for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
     ylabel="$e_3$", 
-    title="$e_3 = n^T R_{\\text{ee}} v_{\\text{ee}}$", 
+    title="$e_3 = r_{\\text{_x_w}}^T r_{\\text{t_y}}$", 
     labels=[s.name for s in sims]
 )
 
@@ -197,11 +199,18 @@ fig_e4 = plotter.generic_plot(
     t, 
     *[s.errors['e4'] for s in sims],
     xlabel="$t \\ [\\text{s}]$", 
-    ylabel="$e_4 \\ [\\text{m/s}]$", 
-    title="$e_4 = v_{\\text{ref}} - v_{\\text{ee}}$", 
+    ylabel="$e_4 \\ [\\text{m}]$", 
+    title="$e_4 = p_{x,\\text{ref}} - p_x$", 
     labels=[s.name for s in sims]
 )
-
+fig_e5 = plotter.generic_plot(
+    t, 
+    *[s.errors['e5'] for s in sims],
+    xlabel="$t \\ [\\text{s}]$", 
+    ylabel="$e_5 \\ [\\text{m/s}]$", 
+    title="$e_5 = v_{\\text{ref}} - v_{\\text{ee}}$", 
+    labels=[s.name for s in sims]
+)
 # Control Input Comparison - Joint 1
 fig_u1 = plotter.generic_plot(
     t, 
