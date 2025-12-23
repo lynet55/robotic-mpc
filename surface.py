@@ -21,7 +21,7 @@ class Surface:
         self.quadratic_surface = self.coeffs['a']*self.x**2 + self.coeffs['b']*self.y**2 + self.coeffs['c']*self.x*self.y + self.coeffs['d']*self.x + self.coeffs['e']*self.y + self.coeffs['f']
         self._build_surface()
 
-    def _build_surface(self):
+    def _build_surface(self): # |Redundant?|
         """Build the symbolic surface expression from coefficients."""
         c = self.coeffs
         self.quadratic_surface = (

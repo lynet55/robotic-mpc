@@ -7,7 +7,7 @@ from acados_template import AcadosModel
 
 class SixDofRobot:
     def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0]):  
-        # Numeric Pinocchio model (for loading URDF and reference) |Deprecable?|
+        # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
         # CasADi Pinocchio model (for symbolic computations)
         self._cmodel = cpin.Model(self._model)
@@ -149,18 +149,7 @@ class SixDofRobot:
                                       [ee_pose_rotmat],
                                       ['q'], ['pose'])
         
-        ''' |Deprecable? No need of euler angles (unless visualizatiomn?)|
-        # Convert rotation matrix to euler angles (ZYX convention)
-        euler_angles = self._rotation_matrix_to_euler_casadi(ee_rotation)
 
-        # Concatenate position and euler angles [x, y, z, roll, pitch, yaw]
-        ee_pose_euler = ca.vertcat(ee_position, euler_angles)
-        
-        # Create FK function with euler angles output
-        self.fk_casadi_euler = ca.Function('forward_kinematics_euler',
-                                            [q_sym],
-                                            [ee_pose_euler],
-                                            ['q'], ['pose'])'''
         
         ee_quat = self._rot_to_quat_casadi(ee_rotation)  # [qx, qy, qz, qw]
         ee_pose_quat = ca.vertcat(ee_position, ee_quat)  
@@ -228,23 +217,6 @@ class SixDofRobot:
         norm_q = ca.sqrt(ca.sumsqr(quat) + eps)
         return quat / norm_q
 
-    ''' |Deprecable?
-    def _rotation_matrix_to_euler_casadi(self, R):
-        """
-        Convert 3x3 rotation matrix to euler angles (ZYX convention) using CasADi
-        
-        Args:
-            R: 3x3 CasADi rotation matrix
-        
-        Returns:
-            euler angles [roll, pitch, yaw] as CasADi expression
-        """
-    
-        pitch = ca.atan2(-R[2, 0], ca.sqrt(R[0, 0]**2 + R[1, 0]**2))
-        roll = ca.atan2(R[2, 1], R[2, 2])
-        yaw = ca.atan2(R[1, 0], R[0, 0])
-        
-        return ca.vertcat(roll, pitch, yaw)'''
     
     def _ee_to_task_transform(self, pose_ee):
         """
@@ -344,9 +316,6 @@ class SixDofRobot:
         model.t_label = '$t$ [s]'
 
         return model, y
-    
-    def forward_kinematics_euler(self, q):
-        return self.fk_casadi_euler(q)
 
     def forward_kinematics_quat(self, q): 
         return self.fk_casadi_quat(q)

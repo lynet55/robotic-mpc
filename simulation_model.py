@@ -1,6 +1,6 @@
 import numpy as np
 import pinocchio as pin
-from Infrastructure.loader import UrdfLoader
+from loader import UrdfLoader
 from numpy.typing import NDArray
 FloatArray = NDArray[np.float64]
 

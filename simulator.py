@@ -1,14 +1,11 @@
-from Infrastructure.loader import UrdfLoader as urdf
-from Infrastructure.visualizer import MeshCatVisualizer as robot_visualizer
+from loader import UrdfLoader as urdf
+from visualizer import MeshCatVisualizer as robot_visualizer
+from prediction_model import SixDofRobot as prediction_robot_6dof
+from simulation_model import Robot as simulation_robot_6dof
 
-from models.prediction_model import SixDofRobot as prediction_robot_6dof
-from models.simulation_model import Robot as simulation_robot_6dof
-
-from mpc.trajectory_optimizer import MPC as model_predictive_control
-from mpc.surface import Surface
-
-from Reporting.plotter import Plotter
-
+from trajectory_optimizer import MPC as model_predictive_control
+from surface import Surface
+from plotter import Plotter
 import numpy as np
 from itertools import product
 import time
@@ -30,7 +27,7 @@ class Simulator:
                  # Optional parameters with clear defaults
                  surface_coeffs=None,
                  solver_options=None,
-                 px_ref=0.40,
+                 px_ref=-0.40,
                  vy_ref=-0.20,
                  scene=True):
         
@@ -336,7 +333,7 @@ class Simulator:
             itse[key] = np.sum(integrand) * self.dt
         
         # Combined RMSE (maximum across all constraints)
-        e1, e2, e3, e4 = errors['e1'], errors['e2'], errors['e3'], errors['e4'], errors['e5']
+        e1, e2, e3, e4, e5 = errors['e1'], errors['e2'], errors['e3'], errors['e4'], errors['e5']
         max_combined_rmse = np.max(np.sqrt(e1**2 + e2**2 + e3**2 + e4**2 + e5**2))
         
         return {
@@ -614,14 +611,14 @@ if __name__ == "__main__":
     
     # Base configuration
     base_config = {
-        'dt': 0.001,
+        'dt': 0.0005,
         'simulation_time': 2.0,
-        'prediction_horizon': 200,
+        'prediction_horizon': 100,
         'surface_limits': ((-2, 2), (-2, 2)),
         'surface_origin': np.array([0.0, 0.0, 0.0]),
         'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
         'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-        'qdot_0': np.array([2, 2, 2, 2, 2, 2]),
+        'qdot_0': np.array([2, 0, 0, -1, 1, 1]),
         'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76], dtype=float),
         'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
         'q_max': np.array([+2*np.pi, +2*np.pi, +np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
