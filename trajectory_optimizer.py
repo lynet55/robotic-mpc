@@ -132,6 +132,13 @@ class MPC:
         g5 = v_t_y
 
         g = ca.vertcat(g1, g2, g3, g4, g5)
+
+        #eps = 0.01
+        #log_term = ca.log(np.linalg.det(J @ J.T) + eps)
+        #w_log = 10
+
+        w_manip_squared = 10
+        manip_squared = ca.det(model.J @ ca.transpose(model.J))
         
         # Weights diagonal matrices
         Q = np.array([ self.w_origin_task,     
@@ -142,10 +149,10 @@ class MPC:
                     ])
         R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
-        W = np.diag(np.concatenate([Q, R]))
+        W = np.diag(np.concatenate([Q, R, [w_manip_squared]]))
 
-        y = ca.vertcat(g, self.acados_model.u)
-        y_ref = np.concatenate([g_ref, np.zeros(self.nu)])
+        y = ca.vertcat(g, self.acados_model.u, manip_squared)
+        y_ref = np.concatenate([g_ref, np.zeros(self.nu), [0]])
 
         self.ocp.cost.cost_type = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr = y

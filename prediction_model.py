@@ -55,7 +55,10 @@ class SixDofRobot:
         self._Bd = None  
         self._update_discrete_lti_matrices()
 
-        self.acados_model, self.y = self._generate_dynamics_model()
+        self.acados_model, self.y, self.J = self._generate_dynamics_model()
+
+        self._J = None
+        self._setup_casadi_functions()
 
     @property
     def Ad(self):
@@ -161,14 +164,21 @@ class SixDofRobot:
         )
 
         # Differential kinematics using CasADi Pinocchio
+
         J = cpin.computeFrameJacobian(self._cmodel, self._cdata, q_sym,
                                        self._cee_frame_id, pin.ReferenceFrame.WORLD)
+        
+        self.J_casadi = ca.Function('geometric_jacobian', [q_sym], [J], ['q'], ['J'])
+        
         ee_velocity = J @ q_dot_sym
         
         self.dk_casadi = ca.Function('differential_kinematics',
                                       [q_sym, q_dot_sym],
                                       [ee_velocity],
                                       ['q', 'q_dot'], ['ee_vel'])
+        
+
+        
     
     def _rot_to_quat_casadi(self, R):
         eps = 1e-10
@@ -290,10 +300,13 @@ class SixDofRobot:
         q = self.state[:self._n_dof]
         q_dot = self.state[self._n_dof:]
 
+        # Geometric Jacobian
+        J=self.J_casadi(q)
+
         # Output 
         pose_ee_rot  = self.fk_casadi_rot(q)  
         vee = self.dk_casadi(q, q_dot)
-
+        
         p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
         y = ca.vertcat(p_task, R_task, vee)
 
@@ -315,7 +328,7 @@ class SixDofRobot:
                           r'$\dot{q5_ref}$ [rad/s]', r'$\dot{q6_ref}$ [rad/s]']
         model.t_label = '$t$ [s]'
 
-        return model, y
+        return model, y, J
 
     def forward_kinematics_quat(self, q): 
         return self.fk_casadi_quat(q)
