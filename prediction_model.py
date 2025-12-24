@@ -57,9 +57,6 @@ class SixDofRobot:
 
         self.acados_model, self.y, self.J = self._generate_dynamics_model()
 
-        self._J = None
-        self._setup_casadi_functions()
-
     @property
     def Ad(self):
         if self._Ad is None:
