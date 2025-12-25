@@ -2,7 +2,7 @@ import casadi as ca
 import numpy as np
 class Surface:
 
-    def __init__(self, position, orientation_rpy, limits):
+    def __init__(self, position, orientation_rpy, limits, coefficients=None):
         self.position = position
         self.orientation_rpy = orientation_rpy
         self.limits = limits
@@ -10,22 +10,34 @@ class Surface:
 
         self.x = ca.SX.sym("x")
         self.y = ca.SX.sym("y")
-        a, b, c, d, e, f = -0.1, 0.1, -0.01, 0.01, 0.01, 0.0
-        self.quadratic_surface = a*self.x**2 + b*self.y**2 + c*self.x*self.y + d*self.x + e*self.y + f
 
-        '''
-        wave_amplitude = 0.1
-        wave_freq_x = 20.0
-        wave_freq_y = 20.0
-        # |CORREZZIONE| Distinguerei la superficie quadratica da quella con sinusoidi
-        self.quadratic_surface = wave_amplitude * (ca.sin(wave_freq_x * self.x) + ca.sin(wave_freq_y * self.y))
-        '''
+        self.coeffs = {
+            'a': -0.1, 'b': 0.1, 'c': -0.01,
+            'd': 0.01, 'e': 0.01, 'f': 0.0
+        }
+        if coefficients:
+            self.coeffs.update(coefficients)
+
+        self.quadratic_surface = self.coeffs['a']*self.x**2 + self.coeffs['b']*self.y**2 + self.coeffs['c']*self.x*self.y + self.coeffs['d']*self.x + self.coeffs['e']*self.y + self.coeffs['f']
+        self._build_surface()
+
+    def _build_surface(self): # |Redundant?|
+        """Build the symbolic surface expression from coefficients."""
+        c = self.coeffs
+        self.quadratic_surface = (
+            c['a']*self.x**2 + c['b']*self.y**2 + c['c']*self.x*self.y +
+            c['d']*self.x + c['e']*self.y + c['f']
+    )
+
+    def rebuild(self):
+        """Rebuilds the symbolic surface expression using current coefficients."""
+        self.quadratic_surface = self.coeffs['a']*self.x**2 + self.coeffs['b']*self.y**2 + self.coeffs['c']*self.x*self.y + self.coeffs['d']*self.x + self.coeffs['e']*self.y + self.coeffs['f']
 
     def get_position(self):
         return self.position
 
     def get_orientation_rpy(self):
-        return self.orientation_rpy
+        return self.orientation_rpy 
 
     def get_limits(self):
         return self.limits
@@ -57,22 +69,17 @@ class Surface:
         return (point_local, point_world)
 
 
+
     def get_point_on_surface(self, x_surface, y_surface):
         """
         Pass x,y get a z which is on the surface
-        
         Returns:
             numpy array [x, y, z] in world frame
         """
         surface_func = self.get_surface_function()
         # Generate random coordinates in local surface frame
-        x_rel = x_surface #Consider Clamping trhese to surface limits
-        y_rel = y_surface
-        z_rel = float(surface_func(x_rel, y_rel))
-        point_local = np.array([x_rel, y_rel, z_rel])
-        point_world = self.surface_to_world_transform(point_local)
-        
-        return (point_local, point_world)
+        z = float(surface_func(x_surface, y_surface))
+        return z
 
     def surface_to_world_transform(self, point_surface_frame):
         roll, pitch, yaw = self.orientation_rpy
@@ -227,31 +234,10 @@ class Surface:
         
         return np.array(path_points_world)
 
-    def get_normal_vector(self, x_surface, y_surface):
-        # Compute partial derivatives symbolically
-        dS_dx = ca.jacobian(self.quadratic_surface, self.x)
-        dS_dy = ca.jacobian(self.quadratic_surface, self.y)
-        
-        # Normal vector components
-        nx = dS_dx
-        ny = dS_dy
-        nz = -1.0
-        
-        # Normalize
-        norm = ca.sqrt(nx**2 + ny**2 + nz**2)
-        nx_norm = nx / norm
-        ny_norm = ny / norm
-        nz_norm = nz / norm
-        
-        # Create a function to evaluate at specific points
-        normal_func = ca.Function('normal', [self.x, self.y], 
-                                [nx_norm, ny_norm, nz_norm])
-        
-        # Evaluate at the given point
-        nx_val, ny_val, nz_val = normal_func(x_surface, y_surface)
-        
-        # Convert to numpy array with numerical values
-        return np.array([float(nx_val), float(ny_val), float(nz_val)])
+    def get_normal_vector(self, x, y):
+        normal_func = self.get_normal_vector_casadi()
+        nx_val, ny_val, nz_val = normal_func(x,y)
+        return np.array([nx_val, ny_val, nz_val])
     
     def get_normal_vector_casadi(self):
         # Assume self.quadratic_surface is expressed in terms of x_sym, y_sym
