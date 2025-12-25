@@ -1,6 +1,13 @@
 import numpy as np
 import plotly.graph_objects as go
+import plotly.io as pio
+import plotly.express as px
 from plotly.subplots import make_subplots
+from pathlib import Path
+import webbrowser
+
+# Configure default renderer for Jupyter notebooks with MathJax support
+pio.renderers.default = "notebook"
 
 class Plotter:
     def __init__(self, template: str = "ggplot2"):
@@ -21,7 +28,7 @@ class Plotter:
             upper_bounds: Optional array of shape (n_joints,) for upper boundary lines.
         """
         if not q_series:
-            return go.Figure()
+            return go.Figure().update_layout(template=self.template)
 
         num_joints = q_series[0].shape[0]
 
@@ -31,9 +38,12 @@ class Plotter:
             vertical_spacing=0.02
         )
 
+        colors = px.colors.qualitative.Plotly
+        
         for i in range(num_joints):
             for j, q in enumerate(q_series):
                 label = labels[j] if labels and j < len(labels) else f"Sim {j+1}"
+                color = colors[j % len(colors)]
                 fig.add_trace(
                     go.Scatter(
                         x=t,
@@ -41,7 +51,8 @@ class Plotter:
                         mode="lines",
                         name=label,
                         legendgroup=label,
-                        showlegend=(i == 0)
+                        showlegend=(i == 0),
+                        line=dict(color=color)
                     ),
                     row=i + 1, col=1
                 )
@@ -66,7 +77,7 @@ class Plotter:
                     showlegend=(i == 0)
                 ), row=i + 1, col=1)
 
-            fig.update_yaxes(title_text=f"${name}_{{{i+1}}}$ [{unit}]", row=i + 1, col=1)
+            fig.update_yaxes(title_text=f"${name}_{{{i+1}}} \\ [\\text{{{unit}}}]$", row=i + 1, col=1)
 
         fig.update_xaxes(title_text="$t \\ [\\text{s}]$", row=num_joints, col=1)
         fig.update_layout(
@@ -214,9 +225,13 @@ class Plotter:
         title: str = "Box Plot",
         ylog: bool = False,
         show_points: bool = True,
+        point_labels: list = None,
+        point_colors: list = None,
+        lower_bound: float = None,
+        upper_bound: float = None,
     ):
         """
-        Create a box plot for multiple series with optional point overlay.
+        Create a box plot for multiple series with optional colored point overlay.
         
         Args:
             data: Dictionary where keys are series names and values are lists/arrays of data.
@@ -225,10 +240,22 @@ class Plotter:
             title: Plot title.
             ylog: Use logarithmic scale for y-axis.
             show_points: Show individual data points as strip plot.
+            point_labels: Labels for each point (used in legend). Same length as each data array.
+            point_colors: Colors for each point. Same length as each data array.
+            lower_bound: Optional lower boundary line (scalar).
+            upper_bound: Optional upper boundary line (scalar).
         """
         fig = go.Figure()
+        
+        # Color palette for scatter points
+        default_colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ]
 
         for name, y_data in data.items():
+            y_data = np.atleast_1d(y_data)
+            
             # Add box plot
             fig.add_trace(go.Box(
                 y=y_data,
@@ -239,23 +266,69 @@ class Plotter:
                 showlegend=False,
             ))
             
-            # Add strip plot alongside
+            # Add scatter points with colors
             if show_points:
-                fig.add_trace(go.Box(
-                    y=y_data,
-                    name=name,
-                    boxpoints='all',
-                    jitter=0.3,
-                    pointpos=-1.5,  # Position points to the left of box
-                    marker=dict(
-                        size=4,
-                        opacity=0.5,
-                        color='rgba(0,0,0,0.3)'
-                    ),
-                    line=dict(width=0),  # No box outline
-                    fillcolor='rgba(255,255,255,0)',  # Transparent box
-                    showlegend=False,
-                ))
+                if point_labels is not None and point_colors is not None:
+                    # Group points by label for legend
+                    unique_labels = list(dict.fromkeys(point_labels))  # Preserve order
+                    for i, label in enumerate(unique_labels):
+                        mask = [pl == label for pl in point_labels]
+                        y_subset = [y for y, m in zip(y_data, mask) if m]
+                        if y_subset:
+                            # Add jitter manually
+                            x_jitter = [name] * len(y_subset)
+                            fig.add_trace(go.Scatter(
+                                x=x_jitter,
+                                y=y_subset,
+                                mode='markers',
+                                name=label,
+                                legendgroup=label,
+                                showlegend=(name == list(data.keys())[0]),  # Show legend only for first box
+                                marker=dict(
+                                    size=8,
+                                    color=point_colors[i] if i < len(point_colors) else default_colors[i % len(default_colors)],
+                                    opacity=0.7,
+                                ),
+                            ))
+                else:
+                    # Default behavior: all points same color
+                    fig.add_trace(go.Box(
+                        y=y_data,
+                        name=name,
+                        boxpoints='all',
+                        jitter=0.3,
+                        pointpos=-1.5,
+                        marker=dict(
+                            size=4,
+                            opacity=0.5,
+                            color='rgba(0,0,0,0.3)'
+                        ),
+                        line=dict(width=0),
+                        fillcolor='rgba(255,255,255,0)',
+                        showlegend=False,
+                    ))
+
+        # Add boundary lines if specified
+        x_categories = list(data.keys())
+        if lower_bound is not None:
+            fig.add_trace(go.Scatter(
+                x=x_categories,
+                y=[lower_bound] * len(x_categories),
+                mode='lines',
+                line=dict(color='red', dash='dot', width=1.5),
+                name='Lower Bound',
+                showlegend=True,
+            ))
+        
+        if upper_bound is not None:
+            fig.add_trace(go.Scatter(
+                x=x_categories,
+                y=[upper_bound] * len(x_categories),
+                mode='lines',
+                line=dict(color='red', dash='dot', width=1.5),
+                name='Upper Bound',
+                showlegend=True,
+            ))
 
         fig.update_layout(
             title=title,
@@ -268,9 +341,10 @@ class Plotter:
             ),
             xaxis=dict(title=xlabel),
             template=self.template,
-            showlegend=False,
-            height=400,
-            margin=dict(l=50, r=20, t=40, b=40),
+            showlegend=point_labels is not None,
+            legend=dict(title="Surface Config") if point_labels is not None else None,
+            height=450,
+            margin=dict(l=50, r=120, t=40, b=40),
         )
         return fig
 
@@ -300,125 +374,6 @@ class Plotter:
         )
         return fig
     
-    # def grid_search_heatmap(
-    #     self,
-    #     sims: list,
-    #     param_x: str,
-    #     param_y: str,
-    #     metric: str = 'rmse_e1',
-    #     xlabel: str = None,
-    #     ylabel: str = None,
-    #     title: str = "Grid Search Heatmap",
-    #     colorbar_title: str = None,
-    # ):
-    #     """
-    #     Create a heatmap visualization of grid search results.
-        
-    #     Args:
-    #         sims: List of simulator objects from grid search
-    #         param_x: Parameter name for x-axis (e.g., 'prediction_horizon')
-    #         param_y: Parameter name for y-axis (e.g., 'dt')
-    #         metric: Metric to visualize (e.g., 'rmse_e1', 'itse_e1', 'avg_mpc_time')
-    #                 Can be any attribute available on the simulator object.
-    #         xlabel: X-axis label (defaults to param_x)
-    #         ylabel: Y-axis label (defaults to param_y)
-    #         title: Plot title
-    #         colorbar_title: Title for colorbar (defaults to metric name)
-        
-    #     Returns:
-    #         Plotly Figure object
-            
-    #     Example:
-    #         fig = plotter.grid_search_heatmap(
-    #             sims=sims,
-    #             param_x='prediction_horizon',
-    #             param_y='dt',
-    #             metric='rmse_e1',
-    #             xlabel='Prediction Horizon',
-    #             ylabel='Time Step [s]',
-    #             title='$e_1$ RMSE vs. MPC Parameters'
-    #         )
-    #     """
-    #     # Extract unique parameter values
-    #     x_values = []
-    #     y_values = []
-    #     z_values = []
-        
-    #     for sim in sims:
-    #         # Get parameter values from simulation
-    #         x_val = sim.get_results().get(param_x)
-    #         y_val = sim.get_results().get(param_y)
-            
-    #         # If not in results, try to get from simulator attributes
-    #         if x_val is None:
-    #             x_val = getattr(sim, param_x, None)
-    #         if y_val is None:
-    #             y_val = getattr(sim, param_y, None)
-                
-    #         # Get metric value
-    #         if hasattr(sim, metric):
-    #             z_val = getattr(sim, metric)
-    #         else:
-    #             # Try to get from summary stats
-    #             stats = sim.get_summary_stats()
-    #             z_val = stats.get(metric)
-            
-    #         if x_val is not None and y_val is not None and z_val is not None:
-    #             x_values.append(x_val)
-    #             y_values.append(y_val)
-    #             z_values.append(z_val)
-        
-    #     # Get unique sorted values for axes
-    #     x_unique = sorted(list(set(x_values)))
-    #     y_unique = sorted(list(set(y_values)))
-        
-    #     # Create 2D grid for heatmap
-    #     z_grid = np.full((len(y_unique), len(x_unique)), np.nan)
-        
-    #     for x_val, y_val, z_val in zip(x_values, y_values, z_values):
-    #         i = y_unique.index(y_val)
-    #         j = x_unique.index(x_val)
-    #         z_grid[i, j] = z_val
-        
-    #     # Create heatmap
-    #     fig = go.Figure(data=go.Heatmap(
-    #         z=z_grid,
-    #         x=x_unique,
-    #         y=y_unique,
-    #         colorscale='Viridis',
-    #         colorbar=dict(
-    #             title=colorbar_title if colorbar_title else metric,
-    #         ),
-    #         hovertemplate=(
-    #             f'{xlabel or param_x}: %{{x}}<br>' +
-    #             f'{ylabel or param_y}: %{{y}}<br>' +
-    #             f'{colorbar_title or metric}: %{{z:.4f}}<br>' +
-    #             '<extra></extra>'
-    #         ),
-    #     ))
-        
-    #     # Add text annotations with values
-    #     for i, y_val in enumerate(y_unique):
-    #         for j, x_val in enumerate(x_unique):
-    #             if not np.isnan(z_grid[i, j]):
-    #                 fig.add_annotation(
-    #                     x=x_val,
-    #                     y=y_val,
-    #                     text=f'{z_grid[i, j]:.4f}',
-    #                     showarrow=False,
-    #                     font=dict(color='white', size=10),
-    #                 )
-        
-    #     fig.update_layout(
-    #         title=title,
-    #         xaxis=dict(title=xlabel if xlabel else param_x),
-    #         yaxis=dict(title=ylabel if ylabel else param_y),
-    #         template=self.template,
-    #         height=400,
-    #         margin=dict(l=50, r=20, t=40, b=40),
-    #     )
-        
-    #     return fig
 
     def gen_html_report(
     self,
@@ -443,9 +398,6 @@ class Plotter:
         Returns:
             Absolute path (string) to the generated HTML report.
         """
-        import plotly.io as pio
-        from pathlib import Path
-        import webbrowser
 
         # --- resolve output dir robustly (independent from cwd) ---
         repo_root = Path(__file__).resolve().parents[1]  # .../Reporting/plotter.py -> repo root
@@ -585,6 +537,99 @@ class Plotter:
         return str(report_path)
 
 
-    def show(self, fig: go.Figure):
-        """Show figure in browser."""
-        fig.show(renderer="browser", config={'mathjax': 'cdn'})
+    def show(self, fig: go.Figure, renderer: str = None):
+        """
+        Show figure with LaTeX/MathJax support.
+        
+        Args:
+            fig: Plotly figure to display
+            renderer: Optional renderer override. Use "browser" for external browser,
+                     None for auto-detect (works in Jupyter notebooks).
+        """
+        if renderer == "browser":
+            fig.show(renderer="browser", config={'mathjax': 'cdn'})
+        else:
+            # For Jupyter notebooks: use notebook renderer with MathJax
+            fig.show(config={'mathjax': 'cdn'})
+
+    def export_svg(
+        self,
+        fig: go.Figure = None,
+        figs: dict = None,
+        filename: str = "plot.svg",
+        output_dir: str = None,
+        width: int = None,
+        height: int = None,
+        scale: float = 1.0,
+    ):
+        """
+        Export figure(s) to SVG format.
+        
+        Args:
+            fig: Single Plotly figure to export (use this OR figs, not both)
+            figs: Dictionary of {name: figure} for batch export
+            filename: Output filename (used when exporting single fig)
+            output_dir: Output directory (default: current working directory)
+            width: Image width in pixels (default: uses figure's width)
+            height: Image height in pixels (default: uses figure's height)
+            scale: Scale factor for the image (default: 1.0)
+        
+        Returns:
+            Path to exported file (single) or list of paths (batch)
+        
+        Example:
+            # Single figure
+            plotter.export_svg(fig_e1, filename="error_e1.svg")
+            
+            # Batch export
+            plotter.export_svg(figs={
+                "error_e1": fig_e1,
+                "error_e2": fig_e2,
+                "sqp_iters": fig_sqp,
+            }, output_dir="exports/")
+        
+        Note:
+            Requires kaleido package: pip install kaleido
+        """
+        from pathlib import Path
+        
+        out_dir = Path(output_dir) if output_dir else Path.cwd()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        
+        export_kwargs = {"format": "svg", "scale": scale}
+        if width is not None:
+            export_kwargs["width"] = width
+        if height is not None:
+            export_kwargs["height"] = height
+        
+        if fig is not None:
+            # Single figure export
+            out_path = out_dir / filename
+            fig.write_image(str(out_path), **export_kwargs)
+            return str(out_path.resolve())
+        
+        elif figs is not None:
+            # Batch export
+            paths = []
+            for name, figure in figs.items():
+                out_path = out_dir / f"{name}.svg"
+                figure.write_image(str(out_path), **export_kwargs)
+                paths.append(str(out_path.resolve()))
+            return paths
+        
+        else:
+            raise ValueError("Must provide either 'fig' or 'figs' argument")
+    
+    @staticmethod
+    def enable_latex_in_notebook():
+        """
+        Call this at the start of a Jupyter notebook to enable LaTeX rendering.
+        
+        Example:
+            from plotter import Plotter
+            Plotter.enable_latex_in_notebook()
+        """
+        from IPython.display import display, HTML
+        display(HTML(
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_SVG"></script>'
+        ))

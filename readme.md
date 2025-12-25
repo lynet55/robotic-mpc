@@ -5,84 +5,65 @@
 
 > **Abstract**
 >
-> This project implements Model Predictive Control (MPC) algorithms for surface tracking 
-> using CasADi and acados frameworks. The work explores numerical optimization techniques 
-> for real-time control applications.
+> This project implements Model Predictive Control (MPC) algorithms for surface tracking.
+> Offers a framework for doing gridseaches, sweeps and induvidual simulations
+> using CasADi and acados frameworks.
 
-## Table of Contents
-- [Overview](#overview)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributors](#contributors)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
 
-## Overview
+## How to
 
-Brief description of your project objectives, methodology, and key features.
-
-## Installation
-
-### Prerequisites
-- Python 3.8 or higher
-- acados C library (see [installation guide](https://docs.acados.org/))
-
-### Setup
-
-1. Clone the repository:
-```sh
-git clone https://github.com/yourusername/mpc-surface-tracking.git
-cd mpc-surface-tracking
-```
-
-2. Create and activate a virtual environment (recommended):
-```sh
-python -m venv venv
-source venv/bin/activate  # On Linux/Mac
-# venv\Scripts\activate   # On Windows
-```
-
-3. Install project dependencies:
-```sh
-pip install -r NOC-project/requirements.txt
-```
+![](reasources/sim_manager.png)
 
 ## Usage
+Take a look at the examples notebook's, make sure to change the path in the 1st cell.
 
-Description of how to run your code, with examples:
+### Running a Grid Search
+
 ```python
-# Example usage
-python main.py --config config.yaml
+from simulator import SimulationManager
+import numpy as np
+
+# Base configuration for all simulations
+BASE_PARAMS = {
+    'dt': 0.0005,
+    'simulation_time': 8,
+    'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+    'prediction_horizon': 200,
+}
+
+# Initialize manager
+manager = SimulationManager(BASE_PARAMS)
+
+# Grid search over multiple parameters
+manager.grid_search({
+    'prediction_horizon': [50, 100, 200],
+    'dt': [0.0005, 0.001],
+    'solver_options': [
+        {'nlp_solver_type': 'SQP', 'qp_solver': 'PARTIAL_CONDENSING_HPIPM'},
+        {'nlp_solver_type': 'SQP_RTI', 'qp_solver': 'PARTIAL_CONDENSING_HPIPM'},
+    ],
+})
+
+# Run all simulations
+results = manager.run_all()
 ```
 
-## Contributors
+**Other options:**
+```python
+# Single parameter sweep
+manager.sweep_parameter('prediction_horizon', [10, 50, 100, 200])
 
-**Course:** 062047 - Numerical Optimization for Control, Autumn 2025
+# Manual simulation
+manager.add_manual(name='custom_run', params={'prediction_horizon': 300})
+```
 
-**Team Members:**
-- *Balin Balinov*
-- *Cristiano*
-- *Simone*
-- *Davide*
+See `examples/simple_sim.ipynb` for single runs and `main.py` for full grid search with plotting.
 
-## License
-
-This project is developed for academic purposes as part of coursework at Politecnico di Milano.
-
-## Acknowledgments
-- [Ubbink et al. "Contactless Surface Following with Acceleration Limits: Enhancing Robot Manipulator Performance through Model Predictive Control." *European Control Conference (ECC)*, 2024.](https://docs.acados.org/)
+### 3D Visuals
+![](reasources/sim.gif)
 
 
-  "env": {
-    "ACADOS_SOURCE_DIR": "/Users/bb/Desktop/robotic-mpc/acados",
-    "DYLD_LIBRARY_PATH": "/Users/bb/Desktop/robotic-mpc/acados/lib"
-  },
+### Plotting & Benchmarks
+![](reasources/g1.png)
+![](reasources/cost.png)
 
-
-## References
-
-
-
----
-
-*Last updated: [Date]*

@@ -66,7 +66,6 @@ class MPC:
         #self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
         self.ocp.solver_options.print_level = 0 
 
-        self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         # Use unique directory per instance to prevent caching conflicts
         self.ocp.code_export_directory = str(code_dir / f'rated_code_ocp_{self._instance_id}')
