@@ -10,6 +10,7 @@ import numpy as np
 from itertools import product
 import time
 from functools import cached_property
+import sys
 
 
 class Simulator:
@@ -29,7 +30,8 @@ class Simulator:
                  solver_options=None,
                  px_ref=-0.40,
                  vy_ref=-0.20,
-                 scene=True):
+                 scene=True,
+                 verbose=True):
         
         # Store all parameters
         self.dt = dt
@@ -48,6 +50,7 @@ class Simulator:
         
         self.px_ref = px_ref
         self.vy_ref = vy_ref
+        self.verbose = verbose
         
         # Initialize tracking arrays
         self.mpc_time = np.zeros(self.Nsim)
@@ -104,10 +107,6 @@ class Simulator:
         # Apply solver options if provided
         if solver_options:
             self._apply_solver_options(solver_options)
-        
-        print("qp_solver =", self.mpc.ocp.solver_options.qp_solver)
-        print("nlp_solver_type =", self.mpc.ocp.solver_options.nlp_solver_type)
-
 
         # Setup solver
         self.mpc.finalize_solver()
@@ -203,13 +202,19 @@ class Simulator:
             # Visualization update
             if self.scene and i % 10 == 0:
                 self._update_visualization(i)
-                print(f"Running time: {self.dt*i:.3f} s of {self.simulation_time} s")
+            
+            # Minimal progress print every 100 steps
+            if self.verbose and i % 100 == 0:
+                pct = (i + 1) / self.Nsim * 100
+                print(f"\r  t={self.dt*i:.2f}s [{pct:5.1f}%]", end="", flush=True)
             
             # Timing control
             time_spent = time.time() - start_time
             if time_spent < self.dt:
                 time.sleep(self.dt - time_spent)
         
+        if self.verbose:
+            print()  # Newline after progress
         self._data_computed = True
 
     def _update_visualization(self, step):
@@ -307,22 +312,14 @@ class Simulator:
         
         Returns:
             dict with keys:
-            - rmse: dict with e1, e2, e3, e4, e5
+            - weighted_rmse: metric for all errors
             - itse: dict with e1, e2, e3, e4, e5
-            - max_combined_rmse: maximum combined error across all constraints
         """
         if not self._data_computed:
             raise RuntimeError("Must call run() before accessing metrics")
         
         errors = self.errors
-        
-        # Calculate RMSE for all errors
-        rmse = {}
-        for key in ['e1', 'e2', 'e3', 'e4', 'e5']:
-            error_signal = errors[key]
-            rmse[key] = np.sqrt(np.sum(error_signal**2) * self.dt / self.simulation_time)
 
-        
         # Calculate ITSE for all errors
         itse = {}
         for key in ['e1', 'e2', 'e3', 'e4', 'e5']:
@@ -331,15 +328,26 @@ class Simulator:
             time_vector = np.arange(num_steps) * self.dt
             integrand = time_vector * (error_signal**2)
             itse[key] = np.sum(integrand) * self.dt
-        
-        # Combined RMSE (maximum across all constraints)
+
         e1, e2, e3, e4, e5 = errors['e1'], errors['e2'], errors['e3'], errors['e4'], errors['e5']
-        max_combined_rmse = np.max(np.sqrt(e1**2 + e2**2 + e3**2 + e4**2 + e5**2))
+        
+        # Calculate RMSE for each error (scalars)
+        rmse = {
+            'e1': float(np.sqrt(np.mean(e1**2))),
+            'e2': float(np.sqrt(np.mean(e2**2))),
+            'e3': float(np.sqrt(np.mean(e3**2))),
+            'e4': float(np.sqrt(np.mean(e4**2))),
+            'e5': float(np.sqrt(np.mean(e5**2))),
+        }
+        
+        # Weighted RMSE using MPC cost weights
+        w1, w2, w3, w4, w5 = self.mpc.w_origin_task, self.mpc.w_normal_alignment_task, self.mpc.w_x_alignment_task, self.mpc.w_fixed_x_task, self.mpc.w_fixed_vy_task
+        weighted_rmse = float(np.sqrt(np.mean(w1*e1**2 + w2*e2**2 + w3*e3**2 + w4*e4**2 + w5*e5**2)))
         
         return {
+            'weighted_rmse': weighted_rmse,
             'rmse': rmse,
-            'itse': itse,
-            'max_combined_rmse': max_combined_rmse
+            'itse': itse
         }
     
     @cached_property
@@ -395,11 +403,7 @@ class Simulator:
             'avg_integration_time': float(np.mean(self.integration_time)),
             'total_time': float(np.sum(total_time))
         }
-    
-    # =========================================================================
-    # HIGH-LEVEL API METHODS
-    # =========================================================================
-    
+
     def get_data(self):
         """
         Get raw simulation time-series data.
@@ -463,7 +467,7 @@ class Simulator:
             'itse_e3': m['itse']['e3'],
             'itse_e4': m['itse']['e4'],
             'itse_e5': m['itse']['e5'],
-            'max_combined_rmse': m['max_combined_rmse'],
+            'weighted_rmse': m['weighted_rmse'],
             # Solver performance
             'total_sqp_iterations': s['total_sqp_iterations'],
             'avg_sqp_iterations': s['avg_sqp_iterations'],
@@ -568,23 +572,35 @@ class SimulationManager:
                 
                 self.simulations.append({'name': name, 'config': config})
     
-    def run_all(self, return_results=True):
+    def run_all(self, return_results=True, verbose=True):
         """
         Run all queued simulations.
         
         Args:
             return_results: If True, return list of result dicts
+            verbose: If True, print progress status
         """
         results = []
+        completed = []
+        sim_times = []
+        total_sims = len(self.simulations)
         
         for i, sim_spec in enumerate(self.simulations):
-            print(f"\n{'='*60}")
-            print(f"[{i+1}/{len(self.simulations)}] Running: {sim_spec['name']}")
-            print(f"{'='*60}")
+            # Print persistent header
+            if verbose:
+                self._print_status(i, total_sims, sim_spec['name'], completed, sim_times)
             
-            sim = Simulator(**sim_spec['config'])
+            sim_start = time.time()
+            # Override verbose in config to match manager setting
+            config = sim_spec['config'].copy()
+            config['verbose'] = verbose
+            sim = Simulator(**config)
             sim.name = sim_spec['name']
             sim.run()
+            sim_elapsed = time.time() - sim_start
+            
+            sim_times.append(sim_elapsed)
+            completed.append((sim_spec['name'], sim_elapsed))
             
             if return_results:
                 results.append({
@@ -595,17 +611,51 @@ class SimulationManager:
                     'summary': sim.get_summary()
                 })
         
-        print(f"\n{'='*60}\nCompleted {len(self.simulations)} simulations\n{'='*60}\n")
+        # Final status
+        if verbose:
+            self._print_status(total_sims, total_sims, None, completed, sim_times, done=True)
         return results if return_results else None
+    
+    def _print_status(self, current_idx, total, current_name, completed, sim_times, done=False):
+        """Print persistent status overview."""
+        # Calculate ETA
+        if sim_times:
+            avg_time = sum(sim_times) / len(sim_times)
+            remaining = total - current_idx
+            eta = avg_time * remaining
+            eta_str = f"ETA: {eta:.1f}s" if eta < 120 else f"ETA: {eta/60:.1f}m"
+        else:
+            eta_str = "ETA: --"
+        
+        # Clear and print header
+        print(f"\033[2J\033[H", end="")  # Clear screen, cursor to top
+        
+        # Status line
+        if done:
+            print(f"═══ DONE: {total} simulations ═══")
+        else:
+            bar_len = 20
+            filled = int(bar_len * current_idx / total)
+            bar = "█" * filled + "░" * (bar_len - filled)
+            print(f"═══ [{current_idx+1}/{total}] {bar} {eta_str} ═══")
+            print(f"▶ {current_name}")
+        
+        # Completed list (last 8 max to keep it compact)
+        if completed:
+            print("─" * 40)
+            show = completed[-8:] if len(completed) > 8 else completed
+            if len(completed) > 8:
+                print(f"  ... +{len(completed) - 8} earlier")
+            for name, elapsed in show:
+                print(f"  ✓ {name} ({elapsed:.1f}s)")
+        
+        print("─" * 40)
+        sys.stdout.flush()
     
     def clear(self):
         """Clear all queued simulations."""
         self.simulations = []
 
-
-# =============================================================================
-# USAGE EXAMPLES - NEW CLEAN API
-# =============================================================================
 
 if __name__ == "__main__":
     
@@ -627,49 +677,22 @@ if __name__ == "__main__":
         'scene': True
     }
     
-    # Example: Single simulation with new API
-    print("Running single simulation...")
+    # Example: Single simulation
     sim = Simulator(**base_config)
     sim.run()
     
-    # Access data efficiently
-    print("\n--- Accessing data with new API ---")
-    
-    # Get only what you need
-    errors = sim.errors
-    print(f"Surface tracking error (e1) range: [{errors['e1'].min():.4f}, {errors['e1'].max():.4f}]")
-    
-    metrics = sim.metrics
-    print(f"RMSE values: e1={metrics['rmse']['e1']:.6f}, e2={metrics['rmse']['e2']:.6f}")
-    
-    solver_stats = sim.solver_stats
-    print(f"Total SQP iterations: {solver_stats['total_sqp_iterations']}")
-    
-    # Get compact summary for comparison
+    # Quick summary
     summary = sim.get_summary()
-    print(f"\nSummary: Max RMSE={summary['max_combined_rmse']:.6f}, "
-          f"Failures={summary['num_failures']}, "
-          f"Avg MPC time={summary['avg_mpc_time']*1000:.2f}ms")
-    
-    # Get raw data for plotting
-    data = sim.get_data()
-    print(f"\nData shapes: q={data['q'].shape}, u={data['u'].shape}")
-    
-    # Full analysis if needed (computed once, cached)
-    analysis = sim.get_analysis()
-    print(f"Analysis keys: {list(analysis.keys())[:5]}...")  # Show first 5 keys
+    print(f"RMSE: {summary['weighted_rmse']:.4f} | Failures: {summary['num_failures']} | MPC: {summary['avg_mpc_time']*1000:.1f}ms")
     
     # Batch simulations
-    print("\n\n--- Running batch simulations ---")
     manager = SimulationManager(base_config)
     manager.sweep('prediction_horizon', [50, 100, 200], name_template='H={}')
     results = manager.run_all()
     
-    # Compare results efficiently
-    print("\n\nComparison across simulations:")
-    print(f"{'Name':<15} {'Max RMSE':<12} {'Total SQP':<12} {'Failures':<10}")
-    print("-" * 49)
+    # Compare
+    print(f"\n{'Name':<12} {'RMSE':<10} {'SQP':<8} {'Fail':<6}")
+    print("─" * 36)
     for r in results:
         s = r['summary']
-        print(f"{r['name']:<15} {s['max_combined_rmse']:<12.6f} "
-              f"{s['total_sqp_iterations']:<12} {s['num_failures']:<10}")
+        print(f"{r['name']:<12} {s['weighted_rmse']:<10.4f} {s['total_sqp_iterations']:<8} {s['num_failures']:<6}")

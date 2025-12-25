@@ -21,14 +21,100 @@ class MeshCatVisualizer:
             urdf_loader.visual_model
         )
         self._viz.initViewer(open=True)
-        self._viz.loadViewerModel()
+        
+        # Set collision geometry colors BEFORE loading (on the geometry model itself)
+        # This ensures proper material assignment for collision cylinders
+        for geom in urdf_loader.collision_model.geometryObjects:
+            # Set a visible orange color with some transparency [R, G, B, A]
+            geom.meshColor = np.array([1.0, 0.5, 0.0, 0.6])
+        
+        # Load viewer model with explicit collision color
+        # Try with collision_color parameter (pinocchio >= 3.2.0)
+        try:
+            self._viz.loadViewerModel(collision_color=[1.0, 0.5, 0.0, 0.6])
+        except TypeError:
+            # Fallback for older pinocchio versions
+            self._viz.loadViewerModel()
+        
+        # Enable collision geometry display
+        self._viz.displayCollisions(True)
+        self._viz.displayVisuals(True)
+        
+        # Initial display
         self._viz.display(self._q)
+        
+        # Store collision model reference
+        self._collision_model = urdf_loader.collision_model
+        
+        # Add ambient light to properly illuminate collision geometries
+        self._viz.viewer["/Lights/AmbientLight"].set_property("intensity", 0.8)
+        
+        # Apply proper materials to collision geometries after loading
+        self._apply_collision_materials(color=0xFF8000, opacity=0.5)
         
         # Hide background by default
         self._viz.viewer["/Background"].set_property("visible", False)
         
         # Storage for lines
         self._lines = {}
+
+    def _apply_collision_materials(self, color=0xFF8000, opacity=0.5):
+        """Apply visible materials to collision geometries (meshes and primitives)."""
+        # Convert hex color to RGB floats
+        r = ((color >> 16) & 0xFF) / 255.0
+        g_color = ((color >> 8) & 0xFF) / 255.0
+        b = (color & 0xFF) / 255.0
+        
+        for geom in self._collision_model.geometryObjects:
+            geom_name = geom.name
+            try:
+                # Access collision geometry in meshcat
+                node = self._viz.viewer[f"pinocchio/collisions/{geom_name}"]
+                
+                # Get geometry shape info
+                geom_obj = geom.geometry
+                geom_type = type(geom_obj).__name__
+                
+                mesh_geom = None
+                
+                # Handle primitive shapes
+                if 'Cylinder' in geom_type:
+                    mesh_geom = g.Cylinder(2 * geom_obj.halfLength, geom_obj.radius)
+                elif 'Sphere' in geom_type:
+                    mesh_geom = g.Sphere(geom_obj.radius)
+                elif 'Box' in geom_type:
+                    half = np.array(geom_obj.halfSide)
+                    mesh_geom = g.Box([2*half[0], 2*half[1], 2*half[2]])
+                elif 'Capsule' in geom_type:
+                    mesh_geom = g.Cylinder(2 * geom_obj.halfLength, geom_obj.radius)
+                
+                # Create material - MeshBasicMaterial doesn't need lighting
+                material = g.MeshBasicMaterial(
+                    color=color,
+                    opacity=opacity,
+                    transparent=True,
+                    wireframe=False
+                )
+                
+                if mesh_geom is not None:
+                    # Primitive shape - replace with colored version
+                    node.set_object(mesh_geom, material)
+                else:
+                    # Mesh geometry (STL/DAE loaded) - set material properties directly
+                    # Use meshcat's property system to change material color
+                    try:
+                        node.set_property("color", [r, g_color, b])
+                        node.set_property("opacity", opacity)
+                    except Exception:
+                        # If property setting fails, try setting on child geometry node
+                        try:
+                            geom_node = node["geometry"]
+                            geom_node.set_property("color", [r, g_color, b])
+                            geom_node.set_property("opacity", opacity)
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"Warning: Could not set material for {geom_name}: {e}")
 
     def jupyter_cell(self):
         """Return the Jupyter widget for inline rendering."""
