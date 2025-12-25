@@ -18,12 +18,15 @@ class UrdfLoader:
 
 
         try:
-            self._model, self._vmodel, self._cmodel = pin.buildModelsFromUrdf(
+            # Load model with both VISUAL and COLLISION geometry types
+            # This ensures DAE files are loaded for visuals, STL for collisions
+            self._model, self._cmodel, self._vmodel = pin.buildModelsFromUrdf(
                 str(self._urdf_file_path),
                 package_dirs=self._mesh_dir,
+                geometry_types=[pin.GeometryType.COLLISION, pin.GeometryType.VISUAL],
             )
             print(f"URDF successfully loaded: {self._urdf_file_path}")
-            print(f"nq = {self._model.nq}, ngeoms(vis) = {self._vmodel.ngeoms}, ngeoms(col) = {self._cmodel.ngeoms}")
+            print(f"nq = {self._model.nq}, ngeoms(col) = {self._cmodel.ngeoms}, ngeoms(vis) = {self._vmodel.ngeoms}")
             self._data = self._model.createData()
             try:
                 # Use 'tool0' as the canonical UR5 end-effector frame

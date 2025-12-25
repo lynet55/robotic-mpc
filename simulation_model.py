@@ -24,13 +24,14 @@ class Robot:
 
         self.z = np.zeros((12,self._N + 1), dtype=np.float64)
         self.u = np.zeros((6,self._N + 1), dtype=np.float64)
-        self._ee_pose_log = np.zeros((6,self._N + 1), dtype=np.float64)
+        self._ee_rpy_log = np.zeros((3,self._N + 1), dtype=np.float64)
+        self._ee_pose_log = np.zeros((12,self._N + 1), dtype=np.float64)
         self._ee_velocity_log = np.zeros((6,self._N + 1), dtype=np.float64)
 
         self._t = 0
         self.z[:, 0] = self._z0
         self.u[:, 0] = self._u0
-        self._ee_pose_log[:, 0] = self.forward_kinematics(self._z0[:6])
+        self._ee_pose_log[:, 0], self._ee_rpy_log[:, 0] = self.forward_kinematics(self._z0[:6])
         self._ee_velocity_log[:, 0] = self.diff_kinematic(self._z0[:6], self._z0[6:])
 
         self._integration_method_name = integration_method
@@ -61,12 +62,14 @@ class Robot:
         pin.updateFramePlacements(self._model, self._data)
         R = self._data.oMf[self._fee].rotation
         p = self._data.oMf[self._fee].translation
+        R_flat = R.reshape(9,)
         roll = np.arctan2(R[2, 1], R[2, 2])
         pitch = np.arctan2(-R[2, 0], np.sqrt(R[0, 0]**2 + R[1, 0]**2))
-        yaw = np.arctan2(R[1, 0], R[0, 0])
-        # quat = pin.Quaternion(R).coeffs()
-        return np.hstack((p, roll, pitch, yaw))  # [x_e, y_e, z_e, roll, pitch, yaw]
-
+        yaw = np.arctan2(R[1, 0], R[0, 0])  
+        pose = np.hstack((p, R_flat))
+        rpy  = np.array([roll, pitch, yaw])
+        return pose, rpy
+    
     def diff_kinematic(self, q, qdot):
         # The WORLD frame is retrieved by Pinocchio from the urdf, where by default is set as coincident with the robot base frame
         J = pin.computeFrameJacobian(self._model, self._data, q, self._fee, pin.ReferenceFrame.WORLD)
@@ -82,7 +85,7 @@ class Robot:
         next_state = self._integration_method(z_k, u_k, self._dt)
         self.z[:, t + 1] = next_state
         self.u[:, t + 1] = u_k
-        self._ee_pose_log[:, t + 1] = self.forward_kinematics(next_state[:6])
+        self._ee_pose_log[:, t + 1], self._ee_rpy_log[:, t + 1] = self.forward_kinematics(next_state[:6])
         self._ee_velocity_log[:, t + 1] = self.diff_kinematic(next_state[:6], next_state[6:])
         return next_state
 
@@ -122,9 +125,13 @@ class Robot:
         """Return end-effector position at the specified t."""
         return self._ee_pose_log[:3, t]
 
-    def ee_orientation(self, t: int) -> FloatArray:
-        """Return end-effector orientation at the specified t."""
-        return self._ee_pose_log[3:6, t]
+    def ee_orientation_euler(self, t: int) -> FloatArray:
+        """Return end-effector orientation as RPY at the specified t."""
+        return self._ee_rpy_log[:, t]
+    
+    def ee_orientation_rot(self, t: int) -> FloatArray:
+        """Return end-effector orientation as R flatten at the specified t."""
+        return self._ee_pose_log[3:12, t]
 
     def ee_velocity(self, t: int) -> FloatArray:
         """Return end-effector velocity at the specified t."""

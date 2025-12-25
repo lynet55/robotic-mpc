@@ -1,3 +1,5 @@
 casadi>=3.6.0
 meshcat
 pinocchio
+plotly
+kaleido
