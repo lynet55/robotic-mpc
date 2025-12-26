@@ -659,7 +659,7 @@ class SimulationManager:
 
 if __name__ == "__main__":
     sim0 = Simulator(
-        dt=0.001,
+        dt=0.0004,
         prediction_horizon=200,
         simulation_time=4000,
         surface_limits=((-2, 2), (-2, 2)),
