@@ -12,7 +12,7 @@ class Surface:
         self.y = ca.SX.sym("y")
 
         self.coeffs = {
-            'a': -0.1, 'b': 0.1, 'c': -0.01,
+            'a': -0.2, 'b': 0.3, 'c': -0.01,
             'd': 0.01, 'e': 0.01, 'f': 0.0
         }
         if coefficients:

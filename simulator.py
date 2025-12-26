@@ -182,7 +182,7 @@ class Simulator:
             status = self.mpc.solver.solve() # solver call
             u = self.mpc.solver.get(0, "u")
             self.mpc_time[i] = time.time() - mpc_start_time
-            
+
             # Store solver stats
             self.solver_status[i] = status # status = 0 is the only one with convergence 
             self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter') # number of SQP iterations
@@ -194,6 +194,10 @@ class Simulator:
             integration_start_time = time.time()
             self.simulation_model.update(current_state, u, i)
             self.integration_time[i] = time.time() - integration_start_time
+
+            #self._update_visualization(i)
+            #print(f"Running time: {self.dt*i:.3f} s of {self.simulation_time} s")
+            #time.sleep(1000)
 
             # Visualization update
             if self.scene and i % 10 == 0:
@@ -617,10 +621,10 @@ if __name__ == "__main__":
     
     # Base configuration
     base_config = {
-        'dt': 0.0005,
-        'simulation_time': 2.0,
-        'prediction_horizon': 100,
-        'surface_limits': ((-2, 2), (-2, 2)),
+        'dt': 0.0004,
+        'simulation_time': 8.0,
+        'prediction_horizon': 200,
+        'surface_limits': ((-1, 1), (-1, 1)),
         'surface_origin': np.array([0.0, 0.0, 0.0]),
         'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
         'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),

@@ -1,4 +1,4 @@
-from pinocchio.visualize import MeshcatVisualizer
+from pinocchio.visualize import MeshcatVisualizer as PinMeshcatVisualizer
 import pinocchio as pin
 import numpy as np
 import casadi as ca
@@ -15,13 +15,15 @@ class MeshCatVisualizer:
         self._data = urdf_loader.data
         self._q = pin.neutral(self._model)
         
-        self._viz = MeshcatVisualizer(
+        self._viz = PinMeshcatVisualizer(
             urdf_loader.model,
             urdf_loader.collision_model,
             urdf_loader.visual_model
         )
         self._viz.initViewer(open=True)
         self._viz.loadViewerModel()
+        self._viz.displayVisuals(True)
+        self._viz.displayCollisions(False)
         self._viz.display(self._q)
         
         # Hide background by default

@@ -24,6 +24,7 @@ class UrdfLoader:
             )
             print(f"URDF successfully loaded: {self._urdf_file_path}")
             print(f"nq = {self._model.nq}, ngeoms(vis) = {self._vmodel.ngeoms}, ngeoms(col) = {self._cmodel.ngeoms}")
+
             self._data = self._model.createData()
             try:
                 # Use 'tool0' as the canonical UR5 end-effector frame

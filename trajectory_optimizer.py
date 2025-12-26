@@ -48,11 +48,18 @@ class MPC:
         self._instance_id = uuid.uuid4().hex[:8]
 
         # Task errors weights
-        self.w_origin_task = 200.0 
+        #self.w_origin_task = 200.0 
+        #self.w_normal_alignment_task = 50.0     
+        #self.w_x_alignment_task = 300.0
+        #self.w_fixed_x_task = 200.0  
+        #self.w_fixed_vy_task = 100.0
+
+
+        self.w_origin_task = 50.0 
         self.w_normal_alignment_task = 50.0     
-        self.w_x_alignment_task = 300.0
-        self.w_fixed_x_task = 200.0  
-        self.w_fixed_vy_task = 100.0
+        self.w_x_alignment_task = 50.0
+        self.w_fixed_x_task = 50.0  
+        self.w_fixed_vy_task = 50.0
 
         # Control effort weight
         self.w_u = 0.01
