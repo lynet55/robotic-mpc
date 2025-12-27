@@ -63,10 +63,10 @@ class MPC:
         # SET OCP OPTIONS
         self.ocp.solver_options.nlp_solver_type = 'SQP' # [SQP, 'SQP_RTI', 'DDP','SQP_WITH_FEASIBLE_QP']
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # ['GAUSS_NEWTON', 'EXACT']
+        #self.ocp.solver_options.hessian_approx = 'EXACT' # ['GAUSS_NEWTON', 'EXACT'], EXACT FOR EXTERNAL SOLUTION
         #self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
         self.ocp.solver_options.print_level = 0 
 
-        self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.qp_tol = 1e-8
         # Use unique directory per instance to prevent caching conflicts
         self.ocp.code_export_directory = str(code_dir / f'rated_code_ocp_{self._instance_id}')
@@ -133,17 +133,14 @@ class MPC:
 
         g = ca.vertcat(g1, g2, g3, g4, g5)
 
-        eps = 0.01
-        #log_term = ca.log(np.linalg.det(J @ J.T) + eps)
-        #w_log = 10
-
-        w_manip_squared = 10
+        w_manip_squared = 2
+        manip_squared_ref = 5
         J = model.J
         JJT= J @ J.T
         manip_squared = ca.det(JJT) 
-        #manipulability = ca.det(ca.sqrt(JJT)) # no solution to SQP
-        #log_manip_sq = ca.log(manip_squared + eps) # slower than the first one
         
+        #NONLINEAR_LS solution
+
         # Weights diagonal matrices
         Q = np.array([ self.w_origin_task,     
                        self.w_normal_alignment_task,        
@@ -155,15 +152,42 @@ class MPC:
 
         W = np.diag(np.concatenate([Q, R, [w_manip_squared]]))
 
-        y = ca.vertcat(g, self.acados_model.u, -manip_squared)
+        y = ca.vertcat(g, self.acados_model.u, manip_squared)
         #y = ca.vertcat(g, self.acados_model.u, -manipulability)
         #y = ca.vertcat(g, self.acados_model.u, -log_manip_sq)
-        y_ref = np.concatenate([g_ref, np.zeros(self.nu), [0]])
+        #y = ca.vertcat(g, self.acados_model.u, -log_manip)
+        y_ref = np.concatenate([g_ref, np.zeros(self.nu), manip_squared_ref])
 
         self.ocp.cost.cost_type = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr = y
         self.ocp.cost.yref = y_ref
         self.ocp.cost.W = W
+
+        '''
+        #EXTERNAL Solution
+
+        u = self.acados_model.u
+
+        Q = ca.DM([
+            self.w_origin_task,
+            self.w_normal_alignment_task,
+            self.w_x_alignment_task,
+            self.w_fixed_x_task,
+            self.w_fixed_vy_task
+        ])
+        R = 2 * ca.DM([self.w_u] * 6)   
+
+        Q_matrix = ca.diag(Q)
+        R_matrix = ca.diag(R)
+
+        g_ref_casadi = ca.DM(g_ref)        
+
+        stage_cost = (g - g_ref_casadi).T @ Q_matrix @ (g - g_ref_casadi) + u.T @ R_matrix @ u - w_manip * manip_squared
+
+        self.ocp.cost.cost_type = 'EXTERNAL'
+        self.ocp.model.cost_expr_ext_cost = stage_cost
+        '''
+
 
         # Control input bounds (joint velocity commands)
         self.ocp.constraints.lbu = dq_min
