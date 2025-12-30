@@ -168,9 +168,9 @@ class MPC:
         lbx[0:6] = qmin
         ubx[0:6] = qmax
 
-        u_max = np.pi
-        lbx[12:18] = -u_max
-        ubx[12:18] =  u_max
+        
+        lbx[12:18] = dq_min
+        ubx[12:18] = dq_max
 
         self.ocp.constraints.lbx = lbx
         self.ocp.constraints.ubx = ubx
