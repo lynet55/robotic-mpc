@@ -5,7 +5,6 @@ from simulation_model import Robot as simulation_robot_6dof
 
 from trajectory_optimizer import MPC as model_predictive_control
 from surface import Surface
-from plotter import Plotter
 import numpy as np
 from itertools import product
 import time
@@ -17,9 +16,10 @@ class Simulator:
     
     def __init__(self, 
                  # Core simulation parameters
+                 robot_name,
                  dt, simulation_time, prediction_horizon,
                  q_0, qdot_0, wcv, q_min, q_max, 
-                 qdot_min, qdot_max,
+                 qdot_min, qdot_max, 
                  
                  # Surface geometry
                  surface_limits, surface_origin, surface_orientation_rpy,
@@ -27,11 +27,13 @@ class Simulator:
                  # Optional parameters with clear defaults
                  surface_coeffs=None,
                  solver_options=None,
-                 px_ref=-0.40,
-                 vy_ref=-0.20,
+                 w_u=0.1,
+                 px_ref=0.40,
+                 vy_ref=0.30,
                  scene=True):
         
         # Store all parameters
+        self.name = robot_name
         self.dt = dt
         self.simulation_time = simulation_time
         self.Nsim = int(simulation_time/dt)
@@ -44,6 +46,7 @@ class Simulator:
         self.q_max = q_max
         self.qdot_min = qdot_min
         self.qdot_max = qdot_max
+        self.w_u=w_u
         self.initial_state = np.hstack((self.q_0, self.qdot_0))
         
         self.px_ref = px_ref
@@ -55,7 +58,7 @@ class Simulator:
         self.sqp_iter = np.zeros(self.Nsim, dtype=int)
         self.solver_status = np.zeros(self.Nsim, dtype=int)
         self.residuals = np.zeros((self.Nsim, 4))
-        self.solver_time_tot = np.zeros(self.Nsim)
+        self.solver_time = np.zeros(self.Nsim)
         self.cost_history = np.zeros(self.Nsim)
         
         # Create surface with coefficients
@@ -67,7 +70,7 @@ class Simulator:
         )
         
         # Initialize robot and models
-        self.robot_loader = urdf('ur5')
+        self.robot_loader = urdf(self.name)
         
         self.simulation_model = simulation_robot_6dof(
             urdf_loader=self.robot_loader,
@@ -84,7 +87,7 @@ class Simulator:
             Ts=self.dt,
             Wcv=self.wcv
         )
-        self.translation = self.prediction_model.translation_array
+        self.translation = self.prediction_model.translation
         
         # Create MPC
         self.mpc = model_predictive_control(
@@ -97,6 +100,7 @@ class Simulator:
             qmax=self.q_max,
             dq_min=self.qdot_min,
             dq_max = self.qdot_max,
+            w_u=self.w_u,
             px_ref=self.px_ref,
             vy_ref=self.vy_ref
         )
@@ -104,10 +108,6 @@ class Simulator:
         # Apply solver options if provided
         if solver_options:
             self._apply_solver_options(solver_options)
-        
-        print("qp_solver =", self.mpc.ocp.solver_options.qp_solver)
-        print("nlp_solver_type =", self.mpc.ocp.solver_options.nlp_solver_type)
-
 
         # Setup solver
         self.mpc.finalize_solver()
@@ -139,11 +139,23 @@ class Simulator:
             resolution=80,
             path="surfaces/quadratic_surface",
             color=0x3399FF,
-            opacity=0.6,
+            opacity=0.4,
             origin=self.surface.position,
             orientation_rpy=self.surface.orientation_rpy,
         )
-        
+        self.scene.add_dashed_isoline_on_surface(
+            casadi_surface_function=self.surface.get_surface_function(),
+            x_const=self.px_ref,
+            y_limits=self.surface.limits[1],
+            n_samples=500,
+            dash_every=6,
+            path="lines/px_ref_dashed",
+            color=0x000000,        # arancio scuro (non confligge con triadi RGB)
+            line_width=5.0,
+            origin=self.surface.position,
+            orientation_rpy=self.surface.orientation_rpy,
+        )
+
         ee_position_0 = self.simulation_model.ee_position(0)
         self.scene.add_triad(
             position=ee_position_0,
@@ -160,8 +172,17 @@ class Simulator:
             self.traj_array,
             path="lines/ee_trajectory",
             color=0xFF0000,
-            line_width=3.0,
+            line_width=2.0
         )
+        z_ref = self.surface.get_point_on_surface(self.px_ref, 0)
+        self.scene.add_point(
+        position=np.array([self.px_ref, 0, z_ref]),
+        path="points/Px_ref",
+        color=0x000000,   # arancio scuro (non confligge con RGB)
+        radius=0.010,
+        opacity=0.8
+        )
+
 
     def _invalidate_cache(self):
         """Invalidate computed property caches."""
@@ -184,21 +205,25 @@ class Simulator:
             mpc_start_time = time.time()
             self.mpc.solver.set(0, 'lbx', current_state)
             self.mpc.solver.set(0, 'ubx', current_state)
-            status = self.mpc.solver.solve() 
+            status = self.mpc.solver.solve() # solver call
             u = self.mpc.solver.get(0, "u")
             self.mpc_time[i] = time.time() - mpc_start_time
-            
+
             # Store solver stats
-            self.solver_status[i] = status
+            self.solver_status[i] = status # status = 0 is the only one with convergence 
             self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter') # number of SQP iterations
             self.residuals[i, :] = self.mpc.solver.get_residuals() # returns [res_stat, res_eq, res_ineq, res_comp].  
-            self.solver_time_tot[i] = self.mpc.solver.get_stats('time_tot') # total CPU time previous call
-            self.cost_history[i] = self.mpc.solver.get_cost() # cost value of the current solution
+            self.solver_time[i] = self.mpc.solver.get_stats('time_tot') # total CPU time previous call
+            self.cost_history[i] = self.mpc.solver.get_cost() # objective value at the current solution
             
             # Integration
             integration_start_time = time.time()
             self.simulation_model.update(current_state, u, i)
             self.integration_time[i] = time.time() - integration_start_time
+
+            #self._update_visualization(i)
+            #print(f"Running time: {self.dt*i:.3f} s of {self.simulation_time} s")
+            #time.sleep(1000)
 
             # Visualization update
             if self.scene and i % 10 == 0:
@@ -240,8 +265,14 @@ class Simulator:
             raise RuntimeError("Must call run() before accessing errors")
 
         # Logged EE pose in WORLD: [p(3); R_flat(9)] for each step
-        p_ee_all = self.simulation_model._ee_pose_log[:3, :]      # (3, N+1)
-        R_flat_all = self.simulation_model._ee_pose_log[3:12, :]  # (9, N+1)
+        p_ee_all = self.simulation_model._ee_pose_log[:3, :]      
+        R_flat_all = self.simulation_model._ee_pose_log[3:12, :] 
+
+
+        # |OUTPUT outside simulation loop|
+        #pose, v_ee = self.simulation_model.simulate_output()
+        #p_ee_all = pose[:3,:]
+        #R_flat_all = pose[:3,:]
 
         n_steps = p_ee_all.shape[1]
 
@@ -250,27 +281,37 @@ class Simulator:
         e3 = np.zeros(n_steps)
         e4 = np.zeros(n_steps)
         e5 = np.zeros(n_steps)
-        z_surface = np.zeros(n_steps)
+        p_task_z_all = np.zeros(n_steps)
 
-        # EE -> task constant rotation
+        # EE - task fixed rotation
         R_ee_t = np.array([
             [1.0,  0.0,  0.0],
             [0.0, 1.0,  0.0],
             [0.0,  0.0, 1.0],
         ])
 
-        t_ee = np.asarray(self.translation).reshape(3,)  # translation expressed in EE frame
+        t_ee = np.asarray(self.translation).reshape(3,)  
 
         n_fun = self.surface.get_normal_vector_casadi()
         S_fun = self.surface.get_surface_function()
 
         for i in range(n_steps):
-            p_ee = p_ee_all[:, i]                 # (3,)
-            R_w_ee = R_flat_all[:, i].reshape(3,3)  # row-wise (3,3)
+            p_ee = p_ee_all[:, i]                 
+            R_w_ee = R_flat_all[:, i].reshape(3,3)  
+            vee = self.simulation_model.ee_velocity(i)[:]
+            v_ee_w=vee[:3]
+            w_ee_w=vee[3:6]
+
+            # Translation vector in WORLD
+            translation_w = R_w_ee @ t_ee
 
             # Task frame in WORLD
             R_w_t = R_w_ee @ R_ee_t
+            # Origin of task frame in WORLD
             p_t = p_ee + R_w_ee @ t_ee
+
+            # Task frame speed in TASK
+            v_task = R_w_t @ (v_ee_w + w_ee_w.T @ translation_w)
 
             # task axes expressed in WORLD (columns!)
             R_task_y = R_w_t[:, 1]
@@ -288,16 +329,16 @@ class Simulator:
             g2 = float(n @ R_task_z)            # alignment
             g3 = float(R_task_y[0])             # x-component of task y-axis
             g4 = p_task_x
-            g5 = float(self.simulation_model.ee_velocity(i)[1])  # v_y in WORLD (or transform if you want v_t_y!)
+            g5 = v_task[1]
 
             e1[i] = g1
             e2[i] = 1.0 - g2
             e3[i] = g3
             e4[i] = self.px_ref - g4
             e5[i] = self.vy_ref - g5
-            z_surface[i] = z_surf
+            p_task_z_all[i] = p_task_z # --> to plot task_z VS surf_z along p_ee_x
 
-        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'z_surface': z_surface}
+        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'p_task_z': p_task_z_all, 'p_ee_y': p_ee_all[1,:]}
 
     
     @cached_property
@@ -365,12 +406,11 @@ class Simulator:
             'res_ineq': self.residuals[:, 2],
             'res_comp': self.residuals[:, 3],
             'cost_history': self.cost_history,
-            'sqp_iterations': self.sqp_iter,
-            'total_sqp_iterations': int(np.sum(self.sqp_iter)),
-            'avg_sqp_iterations': float(np.mean(self.sqp_iter)),
-            'num_failures': int(np.sum(self.solver_status != 0)),
-            'total_solver_time': float(np.sum(self.solver_time_tot)),
-            'max_kkt_residual': float(np.max(kkt_residuals))
+            'total_sqp_iterations': int(np.sum(self.sqp_iter)),      # Negligable
+            'avg_sqp_iterations': float(np.mean(self.sqp_iter)),     # Negligable
+            'num_failures': int(np.sum(self.solver_status != 0)),    # Negligable
+            'total_solver_time': float(np.sum(self.solver_time)),# Negligable
+            'max_kkt_residual': float(np.max(kkt_residuals))         # Negligable (time istant could be added)
         }
     
     @cached_property
@@ -387,13 +427,18 @@ class Simulator:
         total_time = self.mpc_time + self.integration_time
         
         return {
+            # Along simulation [arrays]
             'mpc_time': self.mpc_time,
             'integration_time': self.integration_time,
-            'solver_time_tot': self.solver_time_tot,
-            'total_computation_time': total_time,
+            'solver_time': self.solver_time, # VS mpc_time (should be the almost the same, with solver_time lower)
+            'total_computation_time': total_time,    
+            # Mean along the simulation [scalar]
             'avg_mpc_time': float(np.mean(self.mpc_time)),
+            'avg_solver_time': float(np.mean(self.solver_time)),
             'avg_integration_time': float(np.mean(self.integration_time)),
-            'total_time': float(np.sum(total_time))
+            'avg_total_time': float(np.mean(total_time)),
+            # Sum along the simulation [scalar]
+            'computational_time_sim': float(np.sum(total_time)) # VS simulation time
         }
     
     # =========================================================================
@@ -405,20 +450,32 @@ class Simulator:
         Get raw simulation time-series data.
         
         Returns:
-            dict with time, states, controls, and references
+            dict with time, states, controls, and derived quantities
         """
         if not self._data_computed:
             raise RuntimeError("Must call run() before accessing data")
         
+        q = self.simulation_model.z[:6, :]       
+        qdot = self.simulation_model.z[6:, :]    
+        u = self.simulation_model.u             
+
+        # wcv è (6,) e rappresenta diag(Wcv)
+        wcv = np.asarray(self.wcv).reshape(-1, 1)  # (6,1)
+
+        # ddq = -Wcv*qdot + Wcv*u   (broadcast col tempo)
+        qddot = -wcv * qdot + wcv * u
+
         return {
-            'time': np.arange(0, self.simulation_model.z.shape[1]) * self.dt,
-            'q': self.simulation_model.z[:6, :],
-            'qdot': self.simulation_model.z[6:, :],
-            'u': self.simulation_model.u,
+            'time': np.arange(q.shape[1]) * self.dt,
+            'q': q,
+            'qdot': qdot,
+            'qddot': qddot,
+            'u': u,
             'ee_pose': self.simulation_model._ee_pose_log,
             'px_ref': self.mpc.px_ref,
             'vy_ref': self.mpc.vy_ref,
         }
+
     
     def get_analysis(self):
         """
@@ -472,8 +529,9 @@ class Simulator:
             'total_solver_time': s['total_solver_time'],
             # Timing
             'avg_mpc_time': t['avg_mpc_time'],
+            'avg_solver_time': t['avg_solver_time'],
             'avg_integration_time': t['avg_integration_time'],
-            'total_computation_time': t['total_time']
+            'total_computation_time': t['computational_time_sim']
         }
 
 class SimulationManager:
@@ -611,13 +669,14 @@ if __name__ == "__main__":
     
     # Base configuration
     base_config = {
-        'dt': 0.0005,
-        'simulation_time': 2.0,
-        'prediction_horizon': 100,
-        'surface_limits': ((-2, 2), (-2, 2)),
+        'robot_name':'ur10',
+        'dt': 0.0004,
+        'simulation_time': 8.0,
+        'prediction_horizon': 200,
+        'surface_limits': ((-1.5, 1.5), (-1.5, 1.5)),
         'surface_origin': np.array([0.0, 0.0, 0.0]),
         'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
-        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]), #'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
         'qdot_0': np.array([2, 0, 0, -1, 1, 1]),
         'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76], dtype=float),
         'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
@@ -647,9 +706,13 @@ if __name__ == "__main__":
     
     # Get compact summary for comparison
     summary = sim.get_summary()
-    print(f"\nSummary: Max RMSE={summary['max_combined_rmse']:.6f}, "
-          f"Failures={summary['num_failures']}, "
-          f"Avg MPC time={summary['avg_mpc_time']*1000:.2f}ms")
+    print(f"\nSummary: Max RMSE={summary['max_combined_rmse']:.6f}, \n"
+          f"Failures={summary['num_failures']}, \n"
+          f"Avg MPC time={summary['avg_mpc_time']*1000:.2f}ms, \n"
+          f"Avg plant integration time={summary['avg_integration_time']*1000:.2f}ms, \n"
+          f"Avg solver time={summary['avg_solver_time']*1000:.2f}ms, \n")
+    
+
     
     # Get raw data for plotting
     data = sim.get_data()
@@ -659,6 +722,7 @@ if __name__ == "__main__":
     analysis = sim.get_analysis()
     print(f"Analysis keys: {list(analysis.keys())[:5]}...")  # Show first 5 keys
     
+    '''
     # Batch simulations
     print("\n\n--- Running batch simulations ---")
     manager = SimulationManager(base_config)
@@ -672,4 +736,4 @@ if __name__ == "__main__":
     for r in results:
         s = r['summary']
         print(f"{r['name']:<15} {s['max_combined_rmse']:<12.6f} "
-              f"{s['total_sqp_iterations']:<12} {s['num_failures']:<10}")
+              f"{s['total_sqp_iterations']:<12} {s['num_failures']:<10}")'''

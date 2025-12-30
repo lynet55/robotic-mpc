@@ -1,4 +1,4 @@
-from pinocchio.visualize import MeshcatVisualizer
+from pinocchio.visualize import MeshcatVisualizer as PinMeshcatVisualizer
 import pinocchio as pin
 import numpy as np
 import casadi as ca
@@ -15,13 +15,16 @@ class MeshCatVisualizer:
         self._data = urdf_loader.data
         self._q = pin.neutral(self._model)
         
-        self._viz = MeshcatVisualizer(
+        self._viz = PinMeshcatVisualizer(
             urdf_loader.model,
             urdf_loader.collision_model,
             urdf_loader.visual_model
         )
         self._viz.initViewer(open=True)
         self._viz.loadViewerModel()
+        #self._add_lights()
+        self._viz.displayVisuals(True)
+        self._viz.displayCollisions(False)
         self._viz.display(self._q)
         
         # Hide background by default
@@ -29,6 +32,32 @@ class MeshCatVisualizer:
         
         # Storage for lines
         self._lines = {}
+
+
+
+    def _add_lights(self):
+        # 1) Point light
+        try:
+            self._viz.viewer["/Lights/PointLight"].set_object(
+                g.PointLight(color=0xFFFFFF, intensity=1.0)
+            )
+            self._viz.viewer["/Lights/PointLight"].set_transform(
+                tf.translation_matrix([2.0, 2.0, 2.0])
+            )
+        except Exception as e:
+            print("[MeshCat] Could not add PointLight:", e)
+
+        # 2) Directional light (optional)
+        try:
+            self._viz.viewer["/Lights/DirectionalLight"].set_object(
+                g.DirectionalLight(color=0xFFFFFF, intensity=1.0)
+            )
+            self._viz.viewer["/Lights/DirectionalLight"].set_transform(
+                tf.translation_matrix([3.0, 3.0, 3.0])
+            )
+        except Exception as e:
+            print("[MeshCat] Could not add DirectionalLight:", e)
+
 
     def jupyter_cell(self):
         """Return the Jupyter widget for inline rendering."""
@@ -175,6 +204,74 @@ class MeshCatVisualizer:
             if part:
                 node = node[part]
         node.set_object(geom)
+
+    def add_dashed_isoline_on_surface(
+        self,
+        casadi_surface_function,
+        x_const,
+        y_limits,
+        n_samples=400,
+        dash_every=12,         
+        path="lines/px_ref",
+        color=0xD97706,
+        line_width=3.0,
+        origin=None,
+        orientation_rpy=None,
+    ):
+        """
+        Draw a dashed isoline on the surface: x = x_const, y in [ymin, ymax], z = f(x, y).
+        Dashed effect is approximated by alternating small segments and gaps.
+        """
+
+        # sample along y in surface frame
+        ys = np.linspace(float(y_limits[0]), float(y_limits[1]), int(n_samples))
+        pts = np.zeros((n_samples, 3), dtype=np.float32)
+
+        for i, y in enumerate(ys):
+            z = float(casadi_surface_function(float(x_const), float(y)))
+            pts[i, :] = np.array([float(x_const), float(y), float(z)], dtype=np.float32)
+
+        # apply same world transform used for the surface (origin + rpy), so the line sits on it
+        if origin is None:
+            origin = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        if orientation_rpy is None:
+            orientation_rpy = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+
+        roll, pitch, yaw = float(orientation_rpy[0]), float(orientation_rpy[1]), float(orientation_rpy[2])
+        T = tf.translation_matrix([float(origin[0]), float(origin[1]), float(origin[2])]) @ tf.euler_matrix(roll, pitch, yaw)
+
+        pts_h = np.hstack([pts, np.ones((pts.shape[0], 1), dtype=np.float32)])
+        pts_w = (T @ pts_h.T).T[:, :3]
+
+        # build dashed segments: take pairs (i, i+1) only on "on" intervals
+        seg_points = []
+        on = True
+        counter = 0
+        for i in range(len(pts_w) - 1):
+            if on:
+                seg_points.append(pts_w[i])
+                seg_points.append(pts_w[i + 1])
+            counter += 1
+            if counter >= int(dash_every):
+                counter = 0
+                on = not on
+
+        if len(seg_points) == 0:
+            return
+
+        seg_points = np.array(seg_points, dtype=np.float32)  # shape (2*M, 3)
+
+        geom = g.LineSegments(
+            g.PointsGeometry(seg_points.T),
+            g.LineBasicMaterial(color=int(color), linewidth=float(line_width))
+        )
+
+        node = self._viz.viewer
+        for part in str(path).split("/"):
+            if part:
+                node = node[part]
+        node.set_object(geom)
+
 
     def update_line(self, path, points=None, color=None, line_width=None):
         """

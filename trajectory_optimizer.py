@@ -11,7 +11,7 @@ json_dir = PROJECT_ROOT / "robotic-mpc" / "json_solver"
 code_dir = PROJECT_ROOT / "robotic-mpc" / "code_gen"
 class MPC:
     
-    def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max,
+    def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max, w_u,
                  px_ref= 0.40, vy_ref=-0.20):
         """
         Initialize MPC controller with explicit dependencies.
@@ -48,14 +48,17 @@ class MPC:
         self._instance_id = uuid.uuid4().hex[:8]
 
         # Task errors weights
-        self.w_origin_task = 200.0 
+        self.w_origin_task = 50.0 
         self.w_normal_alignment_task = 50.0     
-        self.w_x_alignment_task = 300.0
-        self.w_fixed_x_task = 200.0  
-        self.w_fixed_vy_task = 100.0
+        self.w_x_alignment_task = 50.0
+        self.w_fixed_x_task = 50.0  
+        self.w_fixed_vy_task = 50.0
 
-        # Control effort weight
-        self.w_u = 0.01
+        # Control effort weights
+        self.w_u = w_u
+
+        # Joint acceleration weights
+        self.w_qddot = 1e-2 
 
         # Create ocp object to formulate the OCP
         self.ocp = AcadosOcp()
@@ -84,6 +87,7 @@ class MPC:
         # MODEL 
         self.acados_model = model.acados_model
         self.y = model.y
+        self.qddot_K = model.qddot_k
         self.ocp.model =self.acados_model 
         # Use unique model name per instance to prevent acados from reusing cached solver
         self.ocp.model.name = f'six_dof_robot_{self._instance_id}'
@@ -103,10 +107,10 @@ class MPC:
         R_task_y = self.y[6:9]
         R_task_z = self.y[9:12]
 
-        vee = self.y[12:18]
-        v_t_x = vee[0]
-        v_t_y = vee[1]
-        v_t_z = vee[2]
+        v_t = self.y[12:15]
+        v_t_x = v_t[0]
+        v_t_y = v_t[1]
+        v_t_z = v_t[2]
 
         # Normal versor of the surface 
         n_fun = self.surface.get_normal_vector_casadi()  
@@ -152,13 +156,12 @@ class MPC:
                     ])
         R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
-        W = np.diag(np.concatenate([Q, R, [w_manip]]))
+        K = np.array([self.w_qddot]*self.nu)
 
-        y = ca.vertcat(g, self.acados_model.u, ca.exp(-2*manip))
-        #y = ca.vertcat(g, self.acados_model.u, -manipulability)
-        #y = ca.vertcat(g, self.acados_model.u, -log_manip_sq)
-        #y = ca.vertcat(g, self.acados_model.u, -log_manip)
-        y_ref = np.concatenate([g_ref, np.zeros(self.nu), [0]])
+        W = np.diag(np.concatenate([Q, R, K, [w_manip]]))
+
+        y = ca.vertcat(g, self.acados_model.u, self.qddot_K, ca.exp(-2*manip)) 
+        y_ref = np.concatenate([g_ref, np.zeros(self.nu), np.zeros(self.nu), [0]])
 
         self.ocp.cost.cost_type = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr = y
