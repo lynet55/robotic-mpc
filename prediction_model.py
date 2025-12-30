@@ -6,13 +6,17 @@ from acados_template import AcadosModel
 
 
 class SixDofRobot:
-    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0]):  
+    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0], surface=None):  
         # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
+        self._data = urdf_loader.data
         # CasADi Pinocchio model (for symbolic computations)
         self._cmodel = cpin.Model(self._model)
         self._cdata = self._cmodel.createData()
         
+        self.surface = surface
+        self.S_fun = surface.get_surface_function() if surface is not None else None
+
         # Get the number of degrees of freedom
         self._n_dof = self._cmodel.nq
 
@@ -26,7 +30,7 @@ class SixDofRobot:
         
         # Get end-effector frame ID from both models
         # Use 'tool0' as the end-effector frame (standard UR5 frame)
-       
+        self._ee_frame_id = self._model.getFrameId('tool0')
         self._cee_frame_id = self._cmodel.getFrameId('tool0')
         
         # Check if frame ID is valid
@@ -42,8 +46,11 @@ class SixDofRobot:
         self._Ts = Ts
 
         # Define CasADi symbolic variables
-        self.state = ca.SX.sym('x', 2 * self._n_dof)  # [q, q_dot]
-        self.input = ca.SX.sym('u', self._n_dof)    # control input (velocity commands)
+         # Augmented state: [q(6), q_dot(6), u_state(6), eta(1)]
+        self.state = ca.SX.sym('x', 2 * self._n_dof + self.n_dof + 1)  
+        # New input: du = Δu
+        self.input = ca.SX.sym('du', self._n_dof)    # control input (velocity commands)
+
         
         # Create CasADi functions for Pinocchio operations
         self._setup_casadi_functions()
@@ -287,8 +294,11 @@ class SixDofRobot:
         This is a first-order, decoupled, speed closed-loop model of the robot.
         """
         # States
-        q = self.state[:self._n_dof]
-        q_dot = self.state[self._n_dof:]
+        q = self.state[0:6]
+        q_dot = self.state[6:12]
+        u = self.state[12:18]
+        eta = self.state[18]
+        du = self.input
 
         # Output 
         pose_ee_rot  = self.fk_casadi_rot(q)  
@@ -297,11 +307,23 @@ class SixDofRobot:
         p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
         y = ca.vertcat(p_task, R_task, vee)
 
+        #Computation of g1
+        p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
+        p_task_x = p_task[0]
+        p_task_y = p_task[1]
+        p_task_z = p_task[2]
+
+        g1 = self.S_fun(p_task_x, p_task_y) - p_task_z
+        
         # Dynamics
         x_k = ca.vertcat(q, q_dot)
         Ad = ca.DM(self._Ad)
         Bd = ca.DM(self._Bd)
-        disc_dyn_expr = Ad @ x_k + Bd @ self.input 
+        x_next = Ad @ x_k + Bd @ u
+        u_next = u + du            # u(k+1) = u(k) + Δu(k)
+        eta_next = eta + g1        # integrator on surface distance error
+        disc_dyn_expr = ca.vertcat(x_next, u_next, eta_next)
+
 
         model = AcadosModel()
 

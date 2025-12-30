@@ -56,7 +56,8 @@ class MPC:
 
         # Control effort weight
         self.w_u = 0.01
-
+        #eta weight
+        self.w_eta = 1.0
         # Create ocp object to formulate the OCP
         self.ocp = AcadosOcp()
 
@@ -133,34 +134,52 @@ class MPC:
         g = ca.vertcat(g1, g2, g3, g4, g5)
         
         # Weights diagonal matrices
-        Q = np.array([ self.w_origin_task,     
+        Qg= np.array([ self.w_origin_task,     
                        self.w_normal_alignment_task,        
                        self.w_x_alignment_task,            
                        self.w_fixed_x_task,       
                        self.w_fixed_vy_task      
                     ])
+        Qeta=np.array([self.w_eta])
         R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
-        W = np.diag(np.concatenate([Q, R]))
+        W = np.diag(np.concatenate([Qg, Qeta, R]))
+        
+        du = self.acados_model.u
+        eta = self.acados_model.x[18]
 
-        y = ca.vertcat(g, self.acados_model.u)
-        y_ref = np.concatenate([g_ref, np.zeros(self.nu)])
+        y = ca.vertcat(g, eta, du)
+        y_ref = np.concatenate([g_ref, np.array([0.0]), np.zeros(self.nu)])
 
         self.ocp.cost.cost_type = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr = y
         self.ocp.cost.yref = y_ref
         self.ocp.cost.W = W
 
-        # Control input bounds (joint velocity commands)
-        self.ocp.constraints.lbu = dq_min
-        self.ocp.constraints.ubu = dq_max
-        self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
+        # Augmented state: [q(6), q_dot(6), u_state(6), eta(1)]
+        nx = 19
+        BIG = 1e9
 
-        # State input bound (joint rotation)
-        self.ocp.constraints.lbx = qmin
-        self.ocp.constraints.ubx = qmax
-        self.ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5])
+        # Make nbx = nx so runtime can do set('lbx', x0_aug) with full state
+        self.ocp.constraints.idxbx = np.arange(nx, dtype=int)
+        lbx = -BIG * np.ones(nx)
+        ubx =  BIG * np.ones(nx)
 
+        lbx[0:6] = qmin
+        ubx[0:6] = qmax
+
+        u_max = np.pi
+        lbx[12:18] = -u_max
+        ubx[12:18] =  u_max
+
+        self.ocp.constraints.lbx = lbx
+        self.ocp.constraints.ubx = ubx
+
+        # --- bounds on du (new OCP input) ---
+        du_max = 0.5
+        self.ocp.constraints.idxbu = np.arange(6, dtype=int)
+        self.ocp.constraints.lbu   = -du_max * np.ones(6)
+        self.ocp.constraints.ubu   =  du_max * np.ones(6)
         # Terminal constraint (Recursive Feasibility)
         '''
         P = ca.DM(self.P)

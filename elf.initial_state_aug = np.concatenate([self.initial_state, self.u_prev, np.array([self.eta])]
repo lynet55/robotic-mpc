@@ -1,0 +1,178 @@
+[1mdiff --git a/simulator.py b/simulator.py[m
+[1mindex c441ed1..b239674 100644[m
+[1m--- a/simulator.py[m
+[1m+++ b/simulator.py[m
+[36m@@ -2,76 +2,51 @@[m [mfrom loader import UrdfLoader as urdf[m
+ from visualizer import MeshCatVisualizer as robot_visualizer[m
+ from prediction_model import SixDofRobot as prediction_robot_6dof[m
+ from simulation_model import Robot as simulation_robot_6dof[m
+[31m-[m
+ from trajectory_optimizer import MPC as model_predictive_control[m
+ from surface import Surface[m
+ from plotter import Plotter[m
+ import numpy as np[m
+[31m-from itertools import product[m
+ import time[m
+[31m-from functools import cached_property[m
+[31m-import sys[m
+[31m-[m
+[32m+[m[32mimport os[m
+[32m+[m[32mimport pinocchio as pin[m
+[32m+[m[32mfrom plotter import Plotter[m
+ [m
+ class Simulator:[m
+[31m-    """Simplified simulator with clean, cached API for data access."""[m
+[31m-    [m
+[31m-    def __init__(self, [m
+[31m-                 # Core simulation parameters[m
+[31m-                 dt, simulation_time, prediction_horizon,[m
+[31m-                 q_0, qdot_0, wcv, q_min, q_max, [m
+[31m-                 qdot_min, qdot_max,[m
+[31m-                 [m
+[31m-                 # Surface geometry[m
+[31m-                 surface_limits, surface_origin, surface_orientation_rpy,[m
+[31m-                 [m
+[31m-                 # Optional parameters with clear defaults[m
+[31m-                 surface_coeffs=None,[m
+[31m-                 solver_options=None,[m
+[31m-                 px_ref=-0.40,[m
+[31m-                 vy_ref=-0.20,[m
+[31m-                 scene=True,[m
+[31m-                 verbose=True):[m
+[31m-        [m
+[31m-        # Store all parameters[m
+[32m+[m[32m    def __init__(self, dt, simulation_time, prediction_horizon, surface_limits, surface_origin, surface_orientation_rpy, qdot_0, q_0, wcv, scene=True):[m
+         self.dt = dt[m
+         self.simulation_time = simulation_time[m
+[31m-        self.Nsim = int(simulation_time/dt)[m
+[31m-        self.prediction_horizon = prediction_horizon[m
+[31m-        [m
+[31m-        self.q_0 = q_0[m
+[31m-        self.qdot_0 = qdot_0[m
+[31m-        self.wcv = wcv[m
+[31m-        self.q_min = q_min[m
+[31m-        self.q_max = q_max[m
+[31m-        self.qdot_min = qdot_min[m
+[31m-        self.qdot_max = qdot_max[m
+[31m-        self.initial_state = np.hstack((self.q_0, self.qdot_0))[m
+[31m-        [m
+[31m-        self.px_ref = px_ref[m
+[31m-        self.vy_ref = vy_ref[m
+[31m-        self.verbose = verbose[m
+[31m-        [m
+[31m-        # Initialize tracking arrays[m
+[32m+[m[32m        self.Nsim = int(simulation_time/dt)  # Total number of simulation steps[m
+[32m+[m
+         self.mpc_time = np.zeros(self.Nsim)[m
+         self.integration_time = np.zeros(self.Nsim)[m
+[31m-        self.sqp_iter = np.zeros(self.Nsim, dtype=int)[m
+[31m-        self.solver_status = np.zeros(self.Nsim, dtype=int)[m
+[31m-        self.residuals = np.zeros((self.Nsim, 4))[m
+[31m-        self.solver_time_tot = np.zeros(self.Nsim)[m
+[31m-        self.cost_history = np.zeros(self.Nsim)[m
+[32m+[m
+[32m+[m[32m        self.sqp_iter = np.zeros(self.Nsim, dtype=int)  # SQP iterations per solve[m
+[32m+[m[32m        self.solver_status = np.zeros(self.Nsim, dtype=int)  # Solver return status[m
+[32m+[m[32m        self.residuals = np.zeros((self.Nsim, 4))  # [res_stat, res_eq, res_ineq, res_comp] per solve[m
+[32m+[m[32m        self.solver_time_tot = np.zeros(self.Nsim)  # Total solver time from acados[m
+[32m+[m[32m        self.cost_history = np.zeros(self.Nsim)  # Cost history per solve[m
+[32m+[m[41m        [m
+[32m+[m[32m        self.prediction_horizon = prediction_horizon  # Number of steps in MPC horizon[m
+[32m+[m[32m        self.surface_limits = surface_limits[m
+[32m+[m[32m        self.surface_origin = surface_origin[m
+[32m+[m[32m        self.surface_orientation_rpy = surface_orientation_rpy[m
+         [m
+[31m-        # Create surface with coefficients[m
+[32m+[m[32m        self.qdot_0 = qdot_0[m
+[32m+[m[32m        self.q_0 = q_0[m
+[32m+[m[32m        self.wcv = wcv[m
+[32m+[m[32m        self.u_prev = np.array(self.qdot_0, dtype=float).reshape(6)[m
+[32m+[m[32m        self.eta = 0.0[m
+[32m+[m[32m        self.initial_state = np.hstack((self.q_0, self.qdot_0))  # 12D[m
+[32m+[m[32m        self.initial_state_aug = np.concatenate([self.initial_state, self.u_prev, np.array([self.eta])])[m
+[32m+[m
+[32m+[m[32m        self.robot_loader = urdf('ur5')[m
+[32m+[m[32m        self.scene = robot_visualizer(self.robot_loader)[m
+[32m+[m
+         self.surface = Surface([m
+             position=surface_origin,[m
+             orientation_rpy=surface_orientation_rpy,[m
+[31m-            limits=surface_limits,[m
+[31m-            coefficients=surface_coeffs[m
+[32m+[m[32m            limits=surface_limits[m
+         )[m
+[31m-        [m
+[31m-        # Initialize robot and models[m
+[31m-        self.robot_loader = urdf('ur5')[m
+[31m-        [m
+         self.simulation_model = simulation_robot_6dof([m
+             urdf_loader=self.robot_loader,[m
+             z0=self.initial_state,[m
+[36m@@ -81,80 +56,52 @@[m [mclass Simulator:[m
+             wcv=self.wcv,[m
+             integration_method="RK4"[m
+         )[m
+[31m-        [m
+[32m+[m[32m        self.simulation_model.input_bias = np.array([0.0, 0.3, 0.0, 0.0, 0.0, 0.0], dtype=float)[m
+         self.prediction_model = prediction_robot_6dof([m
+             urdf_loader=self.robot_loader,[m
+             Ts=self.dt,[m
+[31m-            Wcv=self.wcv[m
+[32m+[m[32m            Wcv=self.wcv,[m
+[32m+[m[32m            surface=self.surface[m
+         )[m
+[31m-        self.translation = self.prediction_model.translation_array[m
+         [m
+[31m-        # Create MPC[m
+[32m+[m[32m        #buffer[m
+[32m+[m[32m        self.g1_log = np.zeros(self.Nsim)[m
+[32m+[m[32m        self.eta_log = np.zeros(self.Nsim)[m
+[32m+[m[32m        self.du_log = np.zeros((6, self.Nsim))[m
+[32m+[m[32m        self.u_cmd_log = np.zeros((6, self.Nsim))[m
+[32m+[m
+         self.mpc = model_predictive_control([m
+             surface=self.surface,[m
+[31m-            initial_state=self.initial_state,[m
+[32m+[m[32m            initial_state=self.initial_state_aug,[m
+             model=self.prediction_model,[m
+             N_horizon=self.prediction_horizon,[m
+[31m-            Tf=self.dt*self.prediction_horizon,[m
+[31m-            qmin=self.q_min,[m
+[31m-            qmax=self.q_max,[m
+[31m-            dq_min=self.qdot_min,[m
+[31m-            dq_max = self.qdot_max,[m
+[31m-            px_ref=self.px_ref,[m
+[31m-            vy_ref=self.vy_ref[m
+[32m+[m[32m            Tf=self.dt*self.prediction_horizon[m
+         )[m
+[31m-        [m
+[31m-        # Apply solver options if provided[m
+[31m-        if solver_options:[m
+[31m-            self._apply_solver_options(solver_options)[m
+ [m
+[31m-        # Setup solver[m
+[31m-        self.mpc.finalize_solver()[m
+[31m-        [m
+[31m-        # Setup visualization[m
+[31m-        if scene:[m
+[31m-            self.scene = robot_visualizer(self.robot_loader)[m
+[31m-            self._setup_visualization()[m
+[31m-        else:[m
+[31m-            self.scene = None[m
+[31m-        [m
+[31m-        # Cache invalidation flag[m
+[31m-        self._data_computed = False[m
+[31m-[m
+[31m-    def _apply_solver_options(self, options):[m
+[31m-        """Apply solver-specific options to the MPC."""[m
+[31m-        for key, value in options.items():[m
+[31m-            if hasattr(self.mpc.ocp.solver_options, key):[m
+[31m-                setattr(self.mpc.ocp.solver_options, key, value)[m
+[31m-            else:[m
+[31m-                print(f"Warning: Unknown solver option '{key}'")[m
+[31m-[m
+[31m-    def _setup_visualization(self):[m
+[31m-        """Setup visualization elements."""[m
+         self.scene.add_surface_from_casadi([m
+             self.surface.get_surface_function(),[m
+[31m-    

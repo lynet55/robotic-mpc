@@ -21,6 +21,7 @@ class Robot:
         self._u0 = u0
         self._N = Nsim
         self.wcv = np.diag(wcv)
+        self.input_bias = np.zeros(6, dtype=float)
 
         self.z = np.zeros((12,self._N + 1), dtype=np.float64)
         self.u = np.zeros((6,self._N + 1), dtype=np.float64)
@@ -76,9 +77,12 @@ class Robot:
         return J @ qdot  # [vx, vy, vz, wx, wy, wz]
 
     def _continuos_time_state(self, z, u):
+        z = np.asarray(z, dtype=float).reshape(12)
+        u = np.asarray(u, dtype=float).reshape(6)
+        u_applied = u + self.input_bias
         z_dot = np.zeros((12,), dtype=np.float64)
         z_dot[:6] = z[6:]  # Joint positions state equations
-        z_dot[6:] = -self.wcv @ z[6:] + self.wcv @ u  # Joint speeds state equations
+        z_dot[6:] = -self.wcv @ z[6:] + self.wcv @ u_applied  # Joint speeds state equations
         return z_dot
 
     def update(self, z_k, u_k, t):

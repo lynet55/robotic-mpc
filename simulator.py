@@ -11,6 +11,7 @@ from itertools import product
 import time
 from functools import cached_property
 import sys
+import pinocchio as pin
 
 
 class Simulator:
@@ -18,7 +19,7 @@ class Simulator:
     
     def __init__(self, 
                  # Core simulation parameters
-                 dt, simulation_time, prediction_horizon,
+                 dt, simulation_time, prediction_horizon, 
                  q_0, qdot_0, wcv, q_min, q_max, 
                  qdot_min, qdot_max,
                  
@@ -46,13 +47,21 @@ class Simulator:
         self.q_max = q_max
         self.qdot_min = qdot_min
         self.qdot_max = qdot_max
+        self.u_prev = np.array(self.qdot_0, dtype=float).reshape(6)
+        self.eta = 0.0
         self.initial_state = np.hstack((self.q_0, self.qdot_0))
+        self.initial_state_aug = np.concatenate([self.initial_state, self.u_prev, np.array([self.eta])])
         
+
+
         self.px_ref = px_ref
         self.vy_ref = vy_ref
         self.verbose = verbose
+        self.prediction_horizon = prediction_horizon  # Number of steps in MPC horizon
+    
         
         # Initialize tracking arrays
+        self.Nsim = int(simulation_time/dt)  # Total number of simulation steps
         self.mpc_time = np.zeros(self.Nsim)
         self.integration_time = np.zeros(self.Nsim)
         self.sqp_iter = np.zeros(self.Nsim, dtype=int)
@@ -60,6 +69,7 @@ class Simulator:
         self.residuals = np.zeros((self.Nsim, 4))
         self.solver_time_tot = np.zeros(self.Nsim)
         self.cost_history = np.zeros(self.Nsim)
+
         
         # Create surface with coefficients
         self.surface = Surface(
@@ -81,18 +91,27 @@ class Simulator:
             wcv=self.wcv,
             integration_method="RK4"
         )
-        
+
+        self.simulation_model.input_bias = np.array([0.0, 0.3, 0.0, 0.0, 0.0, 0.0], dtype=float)
+
         self.prediction_model = prediction_robot_6dof(
             urdf_loader=self.robot_loader,
             Ts=self.dt,
-            Wcv=self.wcv
+            Wcv=self.wcv,
+            surface=self.surface
         )
         self.translation = self.prediction_model.translation_array
         
+        #buffer
+        self.g1_log = np.zeros(self.Nsim)
+        self.eta_log = np.zeros(self.Nsim)
+        self.du_log = np.zeros((6, self.Nsim))
+        self.u_cmd_log = np.zeros((6, self.Nsim))
+
         # Create MPC
         self.mpc = model_predictive_control(
             surface=self.surface,
-            initial_state=self.initial_state,
+            initial_state=self.initial_state_aug,
             model=self.prediction_model,
             N_horizon=self.prediction_horizon,
             Tf=self.dt*self.prediction_horizon,
@@ -147,6 +166,7 @@ class Simulator:
         self.scene.add_triad(
             position=ee_position_0,
             orientation_rpy=self.simulation_model.ee_orientation_euler(0),
+            #orientation_rpy=self.simulation_model.ee_orientation(0),
             path="frames/end_effector_frame",
             scale=0.2,
             line_width=2.0
@@ -169,24 +189,97 @@ class Simulator:
         for attr in ['errors', 'metrics', 'solver_stats', 'timings']:
             if attr in self.__dict__:
                 delattr(self, attr)
+    
+    def _compute_g1_from_state(self, z): 
+        # 1) Extract joint positions
+        q = z[:6]
+
+        # 2) Forward kinematics (WORLD frame)
+        pin.forwardKinematics(self.robot_loader.model,
+                              self.robot_loader.data,
+                              q)
+        pin.updateFramePlacements(self.robot_loader.model,
+                                  self.robot_loader.data)
+        
+        # End-effector pose in WORLD
+        ee_frame_id = self.robot_loader.fee
+        oMf = self.robot_loader.data.oMf[ee_frame_id]
+        p_ee_world = oMf.translation.copy()
+
+        # 3) Task frame position in WORLD
+        p_task_world = p_ee_world + oMf.rotation @ self.prediction_model.translation.full().flatten()
+        
+        # 4) Transform WORLD → SURFACE frame
+        p0 = np.asarray(self.surface.get_position(), dtype=float)
+        rpy = np.asarray(self.surface.get_orientation_rpy(), dtype=float)
+
+        # Rotation matrix WORLD <- SURFACE
+        R_ws = self._rpy_to_rot(rpy)
+        # SURFACE coordinates
+        p_task_surf = R_ws.T @ (p_task_world - p0)
+
+        px, py, pz = p_task_surf
+        z_surf = self.surface.get_point_on_surface(px, py)
+
+        g1 = z_surf - pz
+        return float(g1)
+    
+    def _rpy_to_rot(self, rpy):
+        roll, pitch, yaw = rpy
+
+        Rx = np.array([
+            [1, 0, 0],
+            [0, np.cos(roll), -np.sin(roll)],
+            [0, np.sin(roll),  np.cos(roll)]
+           ]) 
+        Ry = np.array([
+            [ np.cos(pitch), 0, np.sin(pitch)],
+            [0, 1, 0],
+            [-np.sin(pitch), 0, np.cos(pitch)]
+        ])
+
+        Rz = np.array([
+            [np.cos(yaw), -np.sin(yaw), 0],
+            [np.sin(yaw),  np.cos(yaw), 0],
+            [0, 0, 1]
+        ])
+
+        return Rz @ Ry @ Rx
 
     def run(self):
         """Run the simulation."""
         self._invalidate_cache()
-        
+
+    
+                    
         for i in range(self.Nsim):
             start_time = time.time()
             # State Feedback
             current_state = self.simulation_model.state(i) 
+            
+            g1_meas = self._compute_g1_from_state(current_state)
+            self.eta = self.eta + g1_meas
+
+
+            #buffer
+            self.g1_log[i] = g1_meas
+            self.eta_log[i] = self.eta
+
+            x0_aug = np.concatenate([current_state, self.u_prev, np.array([self.eta])])
 
             # MPC solve
             mpc_start_time = time.time()
-            self.mpc.solver.set(0, 'lbx', current_state)
-            self.mpc.solver.set(0, 'ubx', current_state)
+            self.mpc.solver.set(0, 'lbx', x0_aug)
+            self.mpc.solver.set(0, 'ubx', x0_aug)
             status = self.mpc.solver.solve() 
-            u = self.mpc.solver.get(0, "u")
+            du0 = self.mpc.solver.get(0, "u")
+            u_cmd = self.u_prev + du0
             self.mpc_time[i] = time.time() - mpc_start_time
             
+            #buffer
+            self.du_log[:, i] = du0
+            self.u_cmd_log[:, i] = u_cmd
+
             # Store solver stats
             self.solver_status[i] = status
             self.sqp_iter[i] = self.mpc.solver.get_stats('sqp_iter') # number of SQP iterations
@@ -196,9 +289,9 @@ class Simulator:
             
             # Integration
             integration_start_time = time.time()
-            self.simulation_model.update(current_state, u, i)
+            self.simulation_model.update(current_state, u_cmd, i)
             self.integration_time[i] = time.time() - integration_start_time
-
+            self.u_prev = u_cmd
             # Visualization update
             if self.scene and i % 10 == 0:
                 self._update_visualization(i)
