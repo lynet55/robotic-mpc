@@ -148,7 +148,7 @@ class Robot:
     def ee_velocity(self, t: int) -> FloatArray:
         """Return end-effector velocity at the specified t."""
         return self._ee_velocity_log[:, t]
-
+    
     def joint_angles(self, t: int) -> FloatArray:
         """Return joint positions at the specified t."""
         return self.z[:6, t]

@@ -24,11 +24,12 @@ class SixDofRobot:
         else:
             self.c_translation = translation_ee_t
         
-        # Get end-effector frame ID from both models
-        # Use 'tool0' as the end-effector frame (standard UR5 frame)
-       
-        self._cee_frame_id = self._cmodel.getFrameId('tool0')
-        
+        # Get end-effector frame ID 
+        if urdf_loader.name == 'ur5':
+                self._cee_frame_id = self._cmodel.getFrameId('tool0')
+        if urdf_loader.name == 'ur10':
+                self._cee_frame_id = self._cmodel.getFrameId('ee_link')
+                
         # Check if frame ID is valid
         if self._cee_frame_id >= self._model.nframes:
             raise ValueError(f"Frame 'tool0' not found in model. Available frames: {[self._model.frames[i].name for i in range(self._model.nframes)]}")
@@ -55,7 +56,7 @@ class SixDofRobot:
         self._Bd = None  
         self._update_discrete_lti_matrices()
 
-        self.acados_model, self.y = self._generate_dynamics_model()
+        self.acados_model, self.y, self.qddot_k = self._generate_dynamics_model()
 
     @property
     def Ad(self):
@@ -264,16 +265,16 @@ class SixDofRobot:
         )
 
         R_w_t = R_w_ee @ R_ee_t
-
-        p_t = p_ee + R_w_ee @ self.c_translation
-
+        translation_w = R_w_ee @ self.c_translation
+        p_t = p_ee + translation_w
+        
         R_w_t_flat = ca.vertcat(
             R_w_t[0, 0], R_w_t[1, 0], R_w_t[2, 0],
             R_w_t[0, 1], R_w_t[1, 1], R_w_t[2, 1],
             R_w_t[0, 2], R_w_t[1, 2], R_w_t[2, 2],
         )
 
-        return p_t, R_w_t_flat
+        return p_t, R_w_t_flat, translation_w
 
 
     def _generate_dynamics_model(self) -> AcadosModel:
@@ -293,15 +294,30 @@ class SixDofRobot:
         # Output 
         pose_ee_rot  = self.fk_casadi_rot(q)  
         vee = self.dk_casadi(q, q_dot)
+        v_ee_w = vee[0:3]
+        w_ee_w = vee[3:6]
 
-        p_task, R_task = self._ee_to_task_transform(pose_ee_rot)
-        y = ca.vertcat(p_task, R_task, vee)
+        p_task, R_task_flat, translation_w = self._ee_to_task_transform(pose_ee_rot)
+        R_task_w = ca.vertcat(
+            ca.hcat([R_task_flat[0],  R_task_flat[1],  R_task_flat[2]]),
+            ca.hcat([R_task_flat[3],  R_task_flat[4],  R_task_flat[5]]),
+            ca.hcat([R_task_flat[6],  R_task_flat[7],  R_task_flat[8]]),
+        )
+        v_task = R_task_w @ (v_ee_w + ca.cross(w_ee_w,translation_w))
+        y = ca.vertcat(p_task, R_task_flat, v_task)
 
         # Dynamics
         x_k = ca.vertcat(q, q_dot)
         Ad = ca.DM(self._Ad)
         Bd = ca.DM(self._Bd)
         disc_dyn_expr = Ad @ x_k + Bd @ self.input 
+
+        nd = self._n_dof
+        qdot_k = x_k[nd:2*nd]
+        qdot_k_next = disc_dyn_expr[nd:2*nd]
+
+        qddot_k = (qdot_k_next - qdot_k) / self._Ts
+
 
         model = AcadosModel()
 
@@ -315,7 +331,7 @@ class SixDofRobot:
                           r'$\dot{q5_ref}$ [rad/s]', r'$\dot{q6_ref}$ [rad/s]']
         model.t_label = '$t$ [s]'
 
-        return model, y
+        return model, y, qddot_k
 
     def forward_kinematics_quat(self, q): 
         return self.fk_casadi_quat(q)
