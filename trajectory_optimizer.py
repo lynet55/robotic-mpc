@@ -133,11 +133,13 @@ class MPC:
 
         g = ca.vertcat(g1, g2, g3, g4, g5)
 
-        w_manip_squared = 2
-        manip_squared_ref = 5
+        eps = 0.01
+        #w_manip_squared = 10
+        w_manip = 10
         J = model.J
         JJT= J @ J.T
-        manip_squared = ca.det(JJT) 
+        #manip_squared = ca.det(JJT) 
+        manip = ca.sqrt(ca.det(JJT) + eps)
         
         #NONLINEAR_LS solution
 
@@ -150,19 +152,19 @@ class MPC:
                     ])
         R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
-        W = np.diag(np.concatenate([Q, R, [w_manip_squared]]))
+        W = np.diag(np.concatenate([Q, R, [w_manip]]))
 
-        y = ca.vertcat(g, self.acados_model.u, manip_squared)
+        y = ca.vertcat(g, self.acados_model.u, ca.exp(-2*manip))
         #y = ca.vertcat(g, self.acados_model.u, -manipulability)
         #y = ca.vertcat(g, self.acados_model.u, -log_manip_sq)
         #y = ca.vertcat(g, self.acados_model.u, -log_manip)
-        y_ref = np.concatenate([g_ref, np.zeros(self.nu), manip_squared_ref])
+        y_ref = np.concatenate([g_ref, np.zeros(self.nu), [0]])
 
         self.ocp.cost.cost_type = 'NONLINEAR_LS'
         self.ocp.model.cost_y_expr = y
         self.ocp.cost.yref = y_ref
         self.ocp.cost.W = W
-
+        
         '''
         #EXTERNAL Solution
 
@@ -182,13 +184,12 @@ class MPC:
 
         g_ref_casadi = ca.DM(g_ref)        
 
-        stage_cost = (g - g_ref_casadi).T @ Q_matrix @ (g - g_ref_casadi) + u.T @ R_matrix @ u - w_manip * manip_squared
+        stage_cost = (g - g_ref_casadi).T @ Q_matrix @ (g - g_ref_casadi) + u.T @ R_matrix @ u + w_manip_squared * manip_squared
 
         self.ocp.cost.cost_type = 'EXTERNAL'
         self.ocp.model.cost_expr_ext_cost = stage_cost
         '''
-
-
+        
         # Control input bounds (joint velocity commands)
         self.ocp.constraints.lbu = dq_min
         self.ocp.constraints.ubu = dq_max
