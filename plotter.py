@@ -1,39 +1,55 @@
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 from plotly.subplots import make_subplots
 
 class Plotter:
     def __init__(self, template: str = "ggplot2"):
         self.template = template
 
-    def joints(self, t: np.ndarray, *q_series: np.ndarray, labels: list = None, title: str = "Joint Angles", name : str = "q", unit: str = "rad", lower_bounds: np.ndarray = None, upper_bounds: np.ndarray = None):
-        """
-        Plot joint data over time for one or more simulations.
-        
-        Args:
-            t: Array of shape (N,) containing time
-            *q_series: One or more arrays of shape (n_joints, N) containing joint data.
-            labels: List of labels for each series.
-            title: Plot title
-            name: Symbolic name for the variable (e.g., 'q').
-            unit: Unit of the variable.
-            lower_bounds: Optional array of shape (n_joints,) for lower boundary lines.
-            upper_bounds: Optional array of shape (n_joints,) for upper boundary lines.
-        """
+    def joints(
+        self,
+        t: np.ndarray,
+        *q_series: np.ndarray,
+        labels: list = None,
+        title: str = "Joint Velocities",
+        name: str = "q",
+        unit: str = "rad/s",
+        lower_bounds: np.ndarray = None,
+        upper_bounds: np.ndarray = None,
+    ):
         if not q_series:
             return go.Figure()
 
+        t = np.atleast_1d(np.squeeze(t))
         num_joints = q_series[0].shape[0]
 
+        # --- Build figure first (template defines the default colorway used by generic_plot) ---
         fig = make_subplots(
             rows=num_joints, cols=1,
             shared_xaxes=True,
             vertical_spacing=0.02
         )
+        fig.update_layout(template=self.template)
+
+        # --- Use SAME palette as generic_plot (i.e., template colorway) ---
+        colorway = None
+        # 1) from template if available
+        if fig.layout.template is not None and fig.layout.template.layout is not None:
+            colorway = fig.layout.template.layout.colorway
+        # 2) fallback
+        if not colorway:
+            colorway = px.colors.qualitative.Plotly
+
+        if labels is None:
+            labels = [f"Sim {k+1}" for k in range(len(q_series))]
+
+        color_map = {lab: colorway[k % len(colorway)] for k, lab in enumerate(labels)}
 
         for i in range(num_joints):
+            # --- main series (forced color per label => no swapping across subplots) ---
             for j, q in enumerate(q_series):
-                label = labels[j] if labels and j < len(labels) else f"Sim {j+1}"
+                label = labels[j] if j < len(labels) else f"Sim {j+1}"
                 fig.add_trace(
                     go.Scatter(
                         x=t,
@@ -41,42 +57,51 @@ class Plotter:
                         mode="lines",
                         name=label,
                         legendgroup=label,
-                        showlegend=(i == 0)
+                        showlegend=(i == 0),
+                        line=dict(color=color_map[label]),
                     ),
                     row=i + 1, col=1
                 )
-            
-            if upper_bounds is not None and i < len(upper_bounds):
-                fig.add_trace(go.Scatter(
-                    x=t, y=np.atleast_1d(np.full_like(t, upper_bounds[i])),
-                    mode='lines',
-                    line=dict(color='red', dash='dot', width=1.5),
-                    name='Upper Bound',
-                    legendgroup='bounds',
-                    showlegend=(i == 0)
-                ), row=i + 1, col=1)
 
-            if lower_bounds is not None and i < len(lower_bounds):
-                fig.add_trace(go.Scatter(
-                    x=t, y=np.atleast_1d(np.full_like(t, lower_bounds[i])),
-                    mode='lines',
-                    line=dict(color='red', dash='dot', width=1.5),
-                    name='Lower Bound',
-                    legendgroup='bounds',
-                    showlegend=(i == 0)
-                ), row=i + 1, col=1)
+            # --- bounds (added AFTER series so they stay on top) ---
+            if upper_bounds is not None and i < len(upper_bounds) and upper_bounds[i] is not None:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t,
+                        y=np.full_like(t, upper_bounds[i], dtype=float),
+                        mode="lines",
+                        name="Upper Bound",
+                        legendgroup="bounds",
+                        showlegend=(i == 0),
+                        line=dict(color="red", dash="dot", width=2.5),
+                    ),
+                    row=i + 1, col=1
+                )
 
-            fig.update_yaxes(title_text=f"${name}_{{{i+1}}}$ [{unit}]", row=i + 1, col=1)
+            if lower_bounds is not None and i < len(lower_bounds) and lower_bounds[i] is not None:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t,
+                        y=np.full_like(t, lower_bounds[i], dtype=float),
+                        mode="lines",
+                        name="Lower Bound",
+                        legendgroup="bounds",
+                        showlegend=(i == 0),
+                        line=dict(color="red", dash="dot", width=2.5),
+                    ),
+                    row=i + 1, col=1
+                )
+
+            fig.update_yaxes(title_text=f"$\dot {name}_{{{i+1}}}$ [{unit}]", row=i + 1, col=1)
 
         fig.update_xaxes(title_text="$t \\ [\\text{s}]$", row=num_joints, col=1)
         fig.update_layout(
             title=title,
-            template=self.template,
             height=100 * num_joints + 60,
             margin=dict(l=50, r=20, t=40, b=40),
         )
-
         return fig
+
 
     def generic_plot(
         self,

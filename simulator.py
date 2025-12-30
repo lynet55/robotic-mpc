@@ -16,9 +16,10 @@ class Simulator:
     
     def __init__(self, 
                  # Core simulation parameters
+                 robot_name,
                  dt, simulation_time, prediction_horizon,
                  q_0, qdot_0, wcv, q_min, q_max, 
-                 qdot_min, qdot_max,
+                 qdot_min, qdot_max, 
                  
                  # Surface geometry
                  surface_limits, surface_origin, surface_orientation_rpy,
@@ -26,11 +27,13 @@ class Simulator:
                  # Optional parameters with clear defaults
                  surface_coeffs=None,
                  solver_options=None,
+                 w_u=0.1,
                  px_ref=0.40,
-                 vy_ref=-0.20,
+                 vy_ref=0.30,
                  scene=True):
         
         # Store all parameters
+        self.name = robot_name
         self.dt = dt
         self.simulation_time = simulation_time
         self.Nsim = int(simulation_time/dt)
@@ -43,6 +46,7 @@ class Simulator:
         self.q_max = q_max
         self.qdot_min = qdot_min
         self.qdot_max = qdot_max
+        self.w_u=w_u
         self.initial_state = np.hstack((self.q_0, self.qdot_0))
         
         self.px_ref = px_ref
@@ -66,7 +70,7 @@ class Simulator:
         )
         
         # Initialize robot and models
-        self.robot_loader = urdf('ur5')
+        self.robot_loader = urdf(self.name)
         
         self.simulation_model = simulation_robot_6dof(
             urdf_loader=self.robot_loader,
@@ -96,6 +100,7 @@ class Simulator:
             qmax=self.q_max,
             dq_min=self.qdot_min,
             dq_max = self.qdot_max,
+            w_u=self.w_u,
             px_ref=self.px_ref,
             vy_ref=self.vy_ref
         )
@@ -134,11 +139,23 @@ class Simulator:
             resolution=80,
             path="surfaces/quadratic_surface",
             color=0x3399FF,
-            opacity=0.6,
+            opacity=0.4,
             origin=self.surface.position,
             orientation_rpy=self.surface.orientation_rpy,
         )
-        
+        self.scene.add_dashed_isoline_on_surface(
+            casadi_surface_function=self.surface.get_surface_function(),
+            x_const=self.px_ref,
+            y_limits=self.surface.limits[1],
+            n_samples=500,
+            dash_every=6,
+            path="lines/px_ref_dashed",
+            color=0x000000,        # arancio scuro (non confligge con triadi RGB)
+            line_width=5.0,
+            origin=self.surface.position,
+            orientation_rpy=self.surface.orientation_rpy,
+        )
+
         ee_position_0 = self.simulation_model.ee_position(0)
         self.scene.add_triad(
             position=ee_position_0,
@@ -155,8 +172,17 @@ class Simulator:
             self.traj_array,
             path="lines/ee_trajectory",
             color=0xFF0000,
-            line_width=3.0,
+            line_width=2.0
         )
+        z_ref = self.surface.get_point_on_surface(self.px_ref, 0)
+        self.scene.add_point(
+        position=np.array([self.px_ref, 0, z_ref]),
+        path="points/Px_ref",
+        color=0x000000,   # arancio scuro (non confligge con RGB)
+        radius=0.010,
+        opacity=0.8
+        )
+
 
     def _invalidate_cache(self):
         """Invalidate computed property caches."""
@@ -272,10 +298,20 @@ class Simulator:
         for i in range(n_steps):
             p_ee = p_ee_all[:, i]                 
             R_w_ee = R_flat_all[:, i].reshape(3,3)  
+            vee = self.simulation_model.ee_velocity(i)[:]
+            v_ee_w=vee[:3]
+            w_ee_w=vee[3:6]
+
+            # Translation vector in WORLD
+            translation_w = R_w_ee @ t_ee
 
             # Task frame in WORLD
             R_w_t = R_w_ee @ R_ee_t
+            # Origin of task frame in WORLD
             p_t = p_ee + R_w_ee @ t_ee
+
+            # Task frame speed in TASK
+            v_task = R_w_t @ (v_ee_w + w_ee_w.T @ translation_w)
 
             # task axes expressed in WORLD (columns!)
             R_task_y = R_w_t[:, 1]
@@ -293,7 +329,7 @@ class Simulator:
             g2 = float(n @ R_task_z)            # alignment
             g3 = float(R_task_y[0])             # x-component of task y-axis
             g4 = p_task_x
-            g5 = float(self.simulation_model.ee_velocity(i)[1])  # v_y in WORLD (or transform if you want v_t_y!)
+            g5 = v_task[1]
 
             e1[i] = g1
             e2[i] = 1.0 - g2
@@ -302,7 +338,7 @@ class Simulator:
             e5[i] = self.vy_ref - g5
             p_task_z_all[i] = p_task_z # --> to plot task_z VS surf_z along p_ee_x
 
-        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'p_task_z': p_task_z_all, 'p_ee_x': p_ee_all[0,:]}
+        return {'e1': e1, 'e2': e2, 'e3': e3, 'e4': e4, 'e5': e5, 'p_task_z': p_task_z_all, 'p_ee_y': p_ee_all[1,:]}
 
     
     @cached_property
@@ -414,20 +450,32 @@ class Simulator:
         Get raw simulation time-series data.
         
         Returns:
-            dict with time, states, controls, and references
+            dict with time, states, controls, and derived quantities
         """
         if not self._data_computed:
             raise RuntimeError("Must call run() before accessing data")
         
+        q = self.simulation_model.z[:6, :]       
+        qdot = self.simulation_model.z[6:, :]    
+        u = self.simulation_model.u             
+
+        # wcv è (6,) e rappresenta diag(Wcv)
+        wcv = np.asarray(self.wcv).reshape(-1, 1)  # (6,1)
+
+        # ddq = -Wcv*qdot + Wcv*u   (broadcast col tempo)
+        qddot = -wcv * qdot + wcv * u
+
         return {
-            'time': np.arange(0, self.simulation_model.z.shape[1]) * self.dt,
-            'q': self.simulation_model.z[:6, :],
-            'qdot': self.simulation_model.z[6:, :],
-            'u': self.simulation_model.u,
+            'time': np.arange(q.shape[1]) * self.dt,
+            'q': q,
+            'qdot': qdot,
+            'qddot': qddot,
+            'u': u,
             'ee_pose': self.simulation_model._ee_pose_log,
             'px_ref': self.mpc.px_ref,
             'vy_ref': self.mpc.vy_ref,
         }
+
     
     def get_analysis(self):
         """
@@ -621,13 +669,14 @@ if __name__ == "__main__":
     
     # Base configuration
     base_config = {
+        'robot_name':'ur10',
         'dt': 0.0004,
         'simulation_time': 8.0,
         'prediction_horizon': 200,
-        'surface_limits': ((-1, 1), (-1, 1)),
+        'surface_limits': ((-1.5, 1.5), (-1.5, 1.5)),
         'surface_origin': np.array([0.0, 0.0, 0.0]),
         'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
-        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]), #'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
         'qdot_0': np.array([2, 0, 0, -1, 1, 1]),
         'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76], dtype=float),
         'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
