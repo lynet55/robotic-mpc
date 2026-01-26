@@ -98,12 +98,13 @@ class Simulator:
             urdf_loader=self.robot_loader,
             Ts=self.dt,
             Wcv=self.wcv,
-            surface=self.surface
+            surface=self.surface,
+            px_ref=self.px_ref
         )
         self.translation = self.prediction_model.translation_array
         
         #buffer
-        self.g1_log = np.zeros(self.Nsim)
+        self.g4_log = np.zeros(self.Nsim)
         self.eta_log = np.zeros(self.Nsim)
         self.du_log = np.zeros((6, self.Nsim))
         self.u_cmd_log = np.zeros((6, self.Nsim))
@@ -190,39 +191,24 @@ class Simulator:
             if attr in self.__dict__:
                 delattr(self, attr)
     
-    def _compute_g1_from_state(self, z): 
-        # 1) Extract joint positions
+    def _compute_e4_from_state(self, z):
         q = z[:6]
-
-        # 2) Forward kinematics (WORLD frame)
+        
         pin.forwardKinematics(self.robot_loader.model,
                               self.robot_loader.data,
                               q)
+        
         pin.updateFramePlacements(self.robot_loader.model,
                                   self.robot_loader.data)
-        
-        # End-effector pose in WORLD
+
         ee_frame_id = self.robot_loader.fee
         oMf = self.robot_loader.data.oMf[ee_frame_id]
         p_ee_world = oMf.translation.copy()
 
-        # 3) Task frame position in WORLD
         p_task_world = p_ee_world + oMf.rotation @ self.prediction_model.translation.full().flatten()
-        
-        # 4) Transform WORLD → SURFACE frame
-        p0 = np.asarray(self.surface.get_position(), dtype=float)
-        rpy = np.asarray(self.surface.get_orientation_rpy(), dtype=float)
-
-        # Rotation matrix WORLD <- SURFACE
-        R_ws = self._rpy_to_rot(rpy)
-        # SURFACE coordinates
-        p_task_surf = R_ws.T @ (p_task_world - p0)
-
-        px, py, pz = p_task_surf
-        z_surf = self.surface.get_point_on_surface(px, py)
-
-        g1 = z_surf - pz
-        return float(g1)
+        g4 = float(p_task_world[0])
+        e4 = float(self.px_ref - g4)
+        return e4
     
     def _rpy_to_rot(self, rpy):
         roll, pitch, yaw = rpy
@@ -257,12 +243,15 @@ class Simulator:
             # State Feedback
             current_state = self.simulation_model.state(i) 
             
-            g1_meas = self._compute_g1_from_state(current_state)
-            self.eta = self.eta + g1_meas
+            e4_meas = self._compute_e4_from_state(current_state)
+            self.eta = self.eta + self.dt*e4_meas
+            
+            if i % 500 == 0:   # scegli il passo in base a dt
+                print(f"t={i*self.dt:.3f}  e4={e4_meas:.6f}  eta={self.eta:.6f}")
 
 
             #buffer
-            self.g1_log[i] = g1_meas
+            self.g4_log[i] = e4_meas
             self.eta_log[i] = self.eta
 
             x0_aug = np.concatenate([current_state, self.u_prev, np.array([self.eta])])
@@ -702,6 +691,7 @@ class SimulationManager:
                     'data': sim.get_data(),
                     'analysis': sim.get_analysis(),
                     'summary': sim.get_summary()
+                    
                 })
         
         # Final status

@@ -51,7 +51,7 @@ class MPC:
         self.w_origin_task = 200.0 
         self.w_normal_alignment_task = 50.0     
         self.w_x_alignment_task = 300.0
-        self.w_fixed_x_task = 200.0  
+        self.w_fixed_x_task = 20.0  
         self.w_fixed_vy_task = 100.0
 
         # Control effort weight

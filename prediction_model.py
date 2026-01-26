@@ -6,7 +6,7 @@ from acados_template import AcadosModel
 
 
 class SixDofRobot:
-    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0], surface=None):  
+    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0], surface=None, px_ref=-0.40):  
         # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
         self._data = urdf_loader.data
@@ -14,6 +14,7 @@ class SixDofRobot:
         self._cmodel = cpin.Model(self._model)
         self._cdata = self._cmodel.createData()
         
+        self.px_ref = float(px_ref)
         self.surface = surface
         self.S_fun = surface.get_surface_function() if surface is not None else None
 
@@ -313,7 +314,7 @@ class SixDofRobot:
         p_task_y = p_task[1]
         p_task_z = p_task[2]
 
-        g1 = self.S_fun(p_task_x, p_task_y) - p_task_z
+        e4 = self.px_ref - p_task_x
         
         # Dynamics
         x_k = ca.vertcat(q, q_dot)
@@ -321,7 +322,7 @@ class SixDofRobot:
         Bd = ca.DM(self._Bd)
         x_next = Ad @ x_k + Bd @ u
         u_next = u + du            # u(k+1) = u(k) + Δu(k)
-        eta_next = eta + g1        # integrator on surface distance error
+        eta_next = eta + self._Ts*e4        # integrator on surface distance error
         disc_dyn_expr = ca.vertcat(x_next, u_next, eta_next)
 
 
