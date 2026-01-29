@@ -25,19 +25,32 @@ import numpy as np
 
 # Base configuration for all simulations
 BASE_PARAMS = {
-    'dt': 0.0005,
-    'simulation_time': 8,
-    'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-    'prediction_horizon': 200,
-}
+    'robot_name': 'ur10',
+    'dt': 0.01,
+    'simulation_time': 6,
+    'prediction_horizon': 100,
+    'surface_limits': ((-2, 2), (-2, 2)),
+    'surface_origin': np.array([0.0, 0.0, 0.0]),
+    'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
+    'q_0': np.array([np.pi/4, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+    'qdot_0': np.array([1, 2, 1, 0, 0, 0]),
+    'wcv': np.array([200,200,200,200,200,200], dtype=np.float64),
+    'q_min': np.array([-2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
+    'q_max': np.array([+2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
+    'qdot_min': np.array([-2.16, -2.16, -np.pi, -3.20, -3.20, -3.20], dtype=float),
+    'qdot_max': np.array([2.16, 2.16, np.pi, 3.20, 3.20, 3.20], dtype=float),
+    'w_qddot':0.02,
+    'scene': True
+    }
 
 # Initialize manager
 manager = SimulationManager(BASE_PARAMS)
 
 # Grid search over multiple parameters
 manager.grid_search({
-    'prediction_horizon': [50, 100, 200],
-    'dt': [0.0005, 0.001],
+    'prediction_horizon': [20, 30, 40],
+    'w_qddot': [0.02, 0.05],
+    'w_u':[0.01, 0.001],
     'solver_options': [
         {'nlp_solver_type': 'SQP', 'qp_solver': 'PARTIAL_CONDENSING_HPIPM'},
         {'nlp_solver_type': 'SQP_RTI', 'qp_solver': 'PARTIAL_CONDENSING_HPIPM'},
@@ -63,7 +76,9 @@ See `examples/simple_sim.ipynb` for single runs and `main.py` for full grid sear
 ![](reasources/sim.gif)
 
 
-### Plotting & Benchmarks
-![](reasources/g1.png)
-![](reasources/cost.png)
+### Real-time feasibility of the MPC controller
+Across all random surface instances, the MPC computation time consistently remains well below the sampling period, confirming suitability for real-time execution.
+![](reasources/mpc_surfaces.png)
+
+
 

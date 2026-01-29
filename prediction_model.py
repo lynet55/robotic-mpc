@@ -6,7 +6,7 @@ from acados_template import AcadosModel
 
 
 class SixDofRobot:
-    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0]):  
+    def __init__(self, urdf_loader, Ts, Wcv, translation_ee_t=[0,0,0.1]):  
         # Numeric Pinocchio model (for loading URDF and reference)
         self._model = urdf_loader.model
         # CasADi Pinocchio model (for symbolic computations)

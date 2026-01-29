@@ -31,7 +31,7 @@ class Simulator:
                  solver_options=None,
                  w_u=0.01,
                  px_ref=0.40,
-                 vy_ref=0.20,
+                 vy_ref=0.05,
                  scene=True):
         
         # Store all parameters
@@ -54,7 +54,6 @@ class Simulator:
         
         self.px_ref = px_ref
         self.vy_ref = vy_ref
-        self.verbose = verbose
         
         # Initialize tracking arrays
         self.mpc_time = np.zeros(self.Nsim)
@@ -226,25 +225,19 @@ class Simulator:
             self.simulation_model.update(current_state, u, i)
             self.integration_time[i] = time.time() - integration_start_time
             
-            #self._update_visualization(i)
-            #time.sleep(1000)
+            if i == 1:
+                time.sleep(5)
 
             # Visualization update
             if self.scene and i % 10 == 0:
                 self._update_visualization(i)
-            
-            # Minimal progress print every 100 steps
-            if self.verbose and i % 100 == 0:
-                pct = (i + 1) / self.Nsim * 100
-                print(f"\r  t={self.dt*i:.2f}s [{pct:5.1f}%]", end="", flush=True)
             
             # Timing control
             time_spent = time.time() - start_time
             if time_spent < self.dt:
                 time.sleep(self.dt - time_spent)
         
-        if self.verbose:
-            print()  # Newline after progress
+    
         self._data_computed = True
 
     def _update_visualization(self, step):
@@ -645,7 +638,7 @@ class SimulationManager:
                 
                 self.simulations.append({'name': name, 'config': config})
     
-    def run_all(self, return_results=True, verbose=True):
+    def run_all(self, return_results=True):
         """
         Run all queued simulations.
         
@@ -659,14 +652,10 @@ class SimulationManager:
         total_sims = len(self.simulations)
         
         for i, sim_spec in enumerate(self.simulations):
-            # Print persistent header
-            if verbose:
-                self._print_status(i, total_sims, sim_spec['name'], completed, sim_times)
             
             sim_start = time.time()
-            # Override verbose in config to match manager setting
+    
             config = sim_spec['config'].copy()
-            config['verbose'] = verbose
             sim = Simulator(**config)
             sim.name = sim_spec['name']
             sim.run()
@@ -684,9 +673,6 @@ class SimulationManager:
                     'summary': sim.get_summary()
                 })
         
-        # Final status
-        if verbose:
-            self._print_status(total_sims, total_sims, None, completed, sim_times, done=True)
         return results if return_results else None
     
     def _print_status(self, current_idx, total, current_name, completed, sim_times, done=False):

@@ -11,7 +11,7 @@ code_dir = PROJECT_ROOT / "robotic-mpc" / "code_gen"
 class MPC:
     
     def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max, w_u, w_qddot,
-                 px_ref= 0.40, vy_ref=-0.30):
+                 px_ref= 0.40, vy_ref=0.01):
         """
         Initialize MPC controller with explicit dependencies.
         

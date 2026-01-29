@@ -33,9 +33,6 @@ class MeshCatVisualizer:
         # Add ambient light to properly illuminate collision geometries
         self._viz.viewer["/Lights/AmbientLight"].set_property("intensity", 0.8)
         
-        # Apply proper materials to collision geometries after loading
-        self._apply_collision_materials(color=0xFF8000, opacity=0.5)
-        
         # Hide background by default
         self._viz.viewer["/Background"].set_property("visible", False)
         
