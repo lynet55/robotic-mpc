@@ -48,9 +48,6 @@ class SixDofRobot:
         
         # Create CasADi functions for Pinocchio operations
         self._setup_casadi_functions()
-        
-        # Define the dynamics as an ODE
-        #self.acados_model, self.y = self._generate_dynamics_model()
 
         self._Ad = None   
         self._Bd = None  

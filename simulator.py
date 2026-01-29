@@ -23,13 +23,14 @@ class Simulator:
                  
                  # Surface geometry
                  surface_limits, surface_origin, surface_orientation_rpy,
+                 w_qddot,
                  
                  # Optional parameters with clear defaults
                  surface_coeffs=None,
                  solver_options=None,
-                 w_u=0.1,
+                 w_u=0.01,
                  px_ref=0.40,
-                 vy_ref=0.30,
+                 vy_ref=0.20,
                  scene=True):
         
         # Store all parameters
@@ -47,6 +48,7 @@ class Simulator:
         self.qdot_min = qdot_min
         self.qdot_max = qdot_max
         self.w_u=w_u
+        self.w_qddot=w_qddot
         self.initial_state = np.hstack((self.q_0, self.qdot_0))
         
         self.px_ref = px_ref
@@ -101,6 +103,7 @@ class Simulator:
             dq_min=self.qdot_min,
             dq_max = self.qdot_max,
             w_u=self.w_u,
+            w_qddot=self.w_qddot,
             px_ref=self.px_ref,
             vy_ref=self.vy_ref
         )
@@ -220,9 +223,8 @@ class Simulator:
             integration_start_time = time.time()
             self.simulation_model.update(current_state, u, i)
             self.integration_time[i] = time.time() - integration_start_time
-
+            
             #self._update_visualization(i)
-            #print(f"Running time: {self.dt*i:.3f} s of {self.simulation_time} s")
             #time.sleep(1000)
 
             # Visualization update
@@ -456,25 +458,35 @@ class Simulator:
             raise RuntimeError("Must call run() before accessing data")
         
         q = self.simulation_model.z[:6, :]       
-        qdot = self.simulation_model.z[6:, :]    
+        qdot = self.simulation_model.z[6:, :]     
         u = self.simulation_model.u             
 
-        # wcv è (6,) e rappresenta diag(Wcv)
-        wcv = np.asarray(self.wcv).reshape(-1, 1)  # (6,1)
+        
+        wcv = np.asarray(self.wcv).reshape(-1, 1)  
+        qddot = -wcv * qdot + wcv * u              
 
-        # ddq = -Wcv*qdot + Wcv*u   (broadcast col tempo)
-        qddot = -wcv * qdot + wcv * u
+        Ts = self.dt  
+        qddot_fd = np.empty_like(qdot)           
+        
+        qddot_fd[:, :-1] = (qdot[:, 1:] - qdot[:, :-1]) / Ts
 
+        
+        qddot_fd[:, -1] = qddot_fd[:, -2]
+
+        #
         return {
             'time': np.arange(q.shape[1]) * self.dt,
             'q': q,
             'qdot': qdot,
             'qddot': qddot,
+            'qddot_fd': qddot_fd,   # <--- added
             'u': u,
             'ee_pose': self.simulation_model._ee_pose_log,
             'px_ref': self.mpc.px_ref,
             'vy_ref': self.mpc.vy_ref,
+            'N': self.prediction_horizon
         }
+
 
     
     def get_analysis(self):
@@ -669,22 +681,22 @@ if __name__ == "__main__":
     
     # Base configuration
     base_config = {
-        'robot_name':'ur10',
+        'robot_name': 'ur10',
         'dt': 0.0004,
-        'simulation_time': 8.0,
+        'simulation_time': 6.0,
         'prediction_horizon': 200,
-        'surface_limits': ((-1.5, 1.5), (-1.5, 1.5)),
+        'surface_limits': ((-2, 2), (-2, 2)),
         'surface_origin': np.array([0.0, 0.0, 0.0]),
         'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
-        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]), #'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
         'qdot_0': np.array([2, 0, 0, -1, 1, 1]),
         'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76], dtype=float),
-        'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
-        'q_max': np.array([+2*np.pi, +2*np.pi, +np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
-        'qdot_min': np.array([-np.pi, -np.pi, -np.pi, -np.pi, -np.pi, -np.pi], dtype=float),
-        'qdot_max': np.array([np.pi, np.pi, np.pi, np.pi, np.pi, np.pi], dtype=float),
+        'q_min': np.array([-2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
+        'q_max': np.array([+2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
+        'qdot_min': np.array([-2.16, -2.16, -np.pi, -3.20, -3.20, -3.20], dtype=float),
+        'qdot_max': np.array([2.16, 2.16, np.pi, 3.20, 3.20, 3.20], dtype=float),
         'scene': True
-    }
+        }
     
     # Example: Single simulation with new API
     print("Running single simulation...")

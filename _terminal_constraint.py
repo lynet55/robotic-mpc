@@ -57,13 +57,13 @@ def discrete_lqr(A, B, Q, R):
 def build_constraints(q_min, q_max, qdot_min, qdot_max, nx=12, nu=6):
     assert nx == 12 and nu == 6, "Expected dimensions: nx=12, nu=6"
 
-    E = np.block([np.eye(nx // 2), np.zeros((nx // 2, nx // 2))])  # (6,12)
+    E = np.block([np.eye(nx // 2), np.zeros((nx // 2, nx // 2))])  
 
-    Cx = np.vstack([E, -E])              # (12,12)
-    dx = np.hstack([q_max, -q_min])      # (12,)
+    Cx = np.vstack([E, -E])         
+    dx = np.hstack([q_max, -q_min])     
 
-    Cu = np.vstack([np.eye(nu), -np.eye(nu)])  # (12,6)
-    du = np.hstack([qdot_max, -qdot_min])      # (12,)
+    Cu = np.vstack([np.eye(nu), -np.eye(nu)])  
+    du = np.hstack([qdot_max, -qdot_min])      
 
     return Cx, dx, Cu, du
 
@@ -99,8 +99,8 @@ def terminal_ellipsoid_from_lqr(A_d, B_d, Q, rho, Cx, dx, Cu, du, safety=0.98):
 
     K, P = discrete_lqr(A_d, B_d, Q, R)
 
-    C = np.vstack([Cx, Cu @ K])  # (24,12)
-    d = np.hstack([dx, du])      # (24,)
+    C = np.vstack([Cx, Cu @ K]) 
+    d = np.hstack([dx, du])     
 
     alpha, alpha_i, idx_active = alpha_from_constraints_over_ellipsoide(P, C, d, safety=safety)
     J = ellipsoid_metric_J(P, alpha)
@@ -170,7 +170,6 @@ def plot_state_slack_comparison(slack_base, slack_tuned, J_base, J_tuned, nu):
 
     plt.figure(figsize=(10.5, 4.2))
 
-    # Dumbbell segments (light blue)
     for i in range(2*nu):
         plt.plot(
             [x[i], x[i]],
@@ -181,7 +180,6 @@ def plot_state_slack_comparison(slack_base, slack_tuned, J_base, J_tuned, nu):
             zorder=1
         )
 
-    # Baseline Q: open blue circles
     plt.scatter(
         x, s_base,
         s=75,
@@ -193,7 +191,6 @@ def plot_state_slack_comparison(slack_base, slack_tuned, J_base, J_tuned, nu):
         zorder=3
     )
 
-    # Tuned Q: filled blue circles
     plt.scatter(
         x, s_tuned,
         s=75,
@@ -203,7 +200,6 @@ def plot_state_slack_comparison(slack_base, slack_tuned, J_base, J_tuned, nu):
         zorder=4
     )
 
-    # Active constraint (minimum tuned slack)
     i_active = int(np.argmin(s_tuned))
     plt.scatter(
         [x[i_active]],
@@ -232,11 +228,6 @@ def plot_state_slack_comparison(slack_base, slack_tuned, J_base, J_tuned, nu):
 
     plt.ylabel(r"Slack ratio $s_i=\alpha_i/\alpha$", fontsize=13)
     plt.xlabel("Joint position constraints", fontsize=13)
-    '''
-    plt.title(
-        "Effect of $Q$ tuning on joint position constraint utilization",
-        fontsize=14
-    )'''
 
     plt.grid(True, axis='y', linestyle=':', linewidth=0.8, alpha=0.8)
     plt.legend(fontsize=11, frameon=False)
@@ -372,8 +363,6 @@ def main():
     P=res_tuned["P"],
     alpha=res_tuned["alpha"]
     )
-
-
 
     # Plot A: slack comparison with J in legend
     plot_state_slack_comparison(

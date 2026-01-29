@@ -2,17 +2,16 @@ import casadi as ca
 import numpy as np
 import uuid
 import yaml
-from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver, AcadosSim
+from acados_template import AcadosOcp, AcadosOcpSolver
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  
-CONFIG_PATH = PROJECT_ROOT / "robotic-mpc" / "config" / "mpc.yaml"
 json_dir = PROJECT_ROOT / "robotic-mpc" / "json_solver"
 code_dir = PROJECT_ROOT / "robotic-mpc" / "code_gen"
 class MPC:
     
-    def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max, w_u,
-                 px_ref= 0.40, vy_ref=-0.20):
+    def __init__(self, surface, initial_state, model, N_horizon, Tf, qmin, qmax, dq_min, dq_max, w_u, w_qddot,
+                 px_ref= 0.40, vy_ref=-0.30):
         """
         Initialize MPC controller with explicit dependencies.
         
@@ -28,12 +27,6 @@ class MPC:
             translation_ee_t: Translation from EE origin to task origin, expressed in the
                               EE frame. Can be a length-3 iterable or a 3x1 CasADi vector.
         """
-        with CONFIG_PATH.open("r") as f:
-            cfg = yaml.safe_load(f)
-
-        P_cfg = cfg["lqr_terminal"]["P"]
-        self.P = np.array(P_cfg["values"], dtype=float)         
-        self.alpha = cfg["lqr_terminal"]["alpha"]
 
         self.surface = surface 
         self.surface_pos_world = surface.get_position() 
@@ -58,31 +51,26 @@ class MPC:
         self.w_u = w_u
 
         # Joint acceleration weights
-        self.w_qddot = 1e-2 
+        self.w_qddot = w_qddot 
 
         # Create ocp object to formulate the OCP
         self.ocp = AcadosOcp()
 
         # SET OCP OPTIONS
-        self.ocp.solver_options.nlp_solver_type = 'SQP' # [SQP, 'SQP_RTI', 'DDP','SQP_WITH_FEASIBLE_QP']
-        self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' # ['GAUSS_NEWTON', 'EXACT']
-        #self.ocp.solver_options.hessian_approx = 'EXACT' # ['GAUSS_NEWTON', 'EXACT'], EXACT FOR EXTERNAL SOLUTION
-        #self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
+        self.ocp.solver_options.nlp_solver_type = 'SQP' 
+        self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON' 
         self.ocp.solver_options.print_level = 0 
-
         self.ocp.solver_options.qp_tol = 1e-8
-        # Use unique directory per instance to prevent caching conflicts
-        self.ocp.code_export_directory = str(code_dir / f'rated_code_ocp_{self._instance_id}')
-
         self.ocp.solver_options.integrator_type = 'DISCRETE'
-
         self.ocp.solver_options.nlp_solver_warm_start_first_qp = True
         self.ocp.solver_options.qp_solver_warm_start = 2
-
-
-        # set prediction horizon
+        self.ocp.solver_options.nlp_solver_max_iter = 100 
+        self.ocp.solver_options.globalization = 'MERIT_BACKTRACKING'
         self.ocp.solver_options.N_horizon = N_horizon
         self.ocp.solver_options.tf = Tf
+
+         # Use unique directory per instance to prevent caching conflicts
+        self.ocp.code_export_directory = str(code_dir / f'rated_code_ocp_{self._instance_id}')
 
         # MODEL 
         self.acados_model = model.acados_model
@@ -137,9 +125,12 @@ class MPC:
 
         g = ca.vertcat(g1, g2, g3, g4, g5)
 
+        # Initial state constraint will be set at runtime
+        self.ocp.constraints.x0 = initial_state
+
         eps = 0.01
-        #w_manip_squared = 10
-        w_manip = 10
+        # w_manip_squared = 10
+        w_manip = 0
         J = model.J
         JJT= J @ J.T
         #manip_squared = ca.det(JJT) 
@@ -149,11 +140,11 @@ class MPC:
 
         # Weights diagonal matrices
         Q = np.array([ self.w_origin_task,     
-                       self.w_normal_alignment_task,        
-                       self.w_x_alignment_task,            
-                       self.w_fixed_x_task,       
-                       self.w_fixed_vy_task      
-                    ])
+                        self.w_normal_alignment_task,        
+                        self.w_x_alignment_task,            
+                        self.w_fixed_x_task,       
+                        self.w_fixed_vy_task      
+                     ])
         R = 2 * np.array([self.w_u, self.w_u, self.w_u, self.w_u, self.w_u, self.w_u])
 
         K = np.array([self.w_qddot]*self.nu)
@@ -168,30 +159,6 @@ class MPC:
         self.ocp.cost.yref = y_ref
         self.ocp.cost.W = W
         
-        '''
-        #EXTERNAL Solution
-
-        u = self.acados_model.u
-
-        Q = ca.DM([
-            self.w_origin_task,
-            self.w_normal_alignment_task,
-            self.w_x_alignment_task,
-            self.w_fixed_x_task,
-            self.w_fixed_vy_task
-        ])
-        R = 2 * ca.DM([self.w_u] * 6)   
-
-        Q_matrix = ca.diag(Q)
-        R_matrix = ca.diag(R)
-
-        g_ref_casadi = ca.DM(g_ref)        
-
-        stage_cost = (g - g_ref_casadi).T @ Q_matrix @ (g - g_ref_casadi) + u.T @ R_matrix @ u + w_manip_squared * manip_squared
-
-        self.ocp.cost.cost_type = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost = stage_cost
-        '''
         
         # Control input bounds (joint velocity commands)
         self.ocp.constraints.lbu = dq_min
@@ -203,17 +170,8 @@ class MPC:
         self.ocp.constraints.ubx = qmax
         self.ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5])
 
-        # Terminal constraint (Recursive Feasibility)
-        '''
-        P = ca.DM(self.P)
-        x = self.acados_model.x
-
-        h_e = ca.mtimes([x.T, P, x])  # scalare
-
-        self.ocp.model.con_h_expr_e = h_e
-        self.ocp.constraints.lh_e = np.array([-1e16])
-        self.ocp.constraints.uh_e = np.array([self.alpha])      # x'Px <= alpha
-        '''
+ 
+        
         # Initial state constraint will be set at runtime
         self.ocp.constraints.x0 = initial_state
 
