@@ -2,7 +2,6 @@ __pycache__
 .DS_Store
 .vscode
 run.sh
-acados_ocp.json
 
 # Ignore folder contents but keep folders (with .gitkeep)
 acados/*
