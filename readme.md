@@ -34,11 +34,10 @@ BASE_PARAMS = {
     'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
     'q_0': np.array([np.pi/4, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
     'qdot_0': np.array([1, 2, 1, 0, 0, 0]),
-    'wcv': np.array([200,200,200,200,200,200], dtype=np.float64),
-    'q_min': np.array([-2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
-    'q_max': np.array([+2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
-    'qdot_min': np.array([-2.16, -2.16, -np.pi, -3.20, -3.20, -3.20], dtype=float),
-    'qdot_max': np.array([2.16, 2.16, np.pi, 3.20, 3.20, 3.20], dtype=float),
+    'q_min': np.array([-2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi, -2*np.pi]),
+    'q_max': np.array([+2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi, +2*np.pi]),
+    'qdot_min': np.array([-2.16, -2.16, -np.pi, -3.20, -3.20, -3.20]),
+    'qdot_max': np.array([2.16, 2.16, np.pi, 3.20, 3.20, 3.20]),
     'w_qddot':0.02,
     'scene': True
     }
@@ -73,12 +72,12 @@ manager.add_manual(name='custom_run', params={'prediction_horizon': 300})
 See `examples/simple_sim.ipynb` for single runs and `main.py` for full grid search with plotting.
 
 ### 3D Visuals
-![](reasources/sim.gif)
+![](resources/sim.gif)
 
 
 ### Real-time feasibility of the MPC controller
 Across all random surface instances, the MPC computation time consistently remains well below the sampling period, confirming suitability for real-time execution.
-![](reasources/mpc_surfaces.png)
+![](resources/mpc_surfaces.png)
 
 
 
