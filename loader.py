@@ -15,6 +15,7 @@ class UrdfLoader:
         self._cmodel = None
         self._data: Optional[pin.Data] = None
         self._fee: Optional[int] = None
+        self.name = robot_name
 
 
         try:
@@ -29,8 +30,10 @@ class UrdfLoader:
             print(f"nq = {self._model.nq}, ngeoms(col) = {self._cmodel.ngeoms}, ngeoms(vis) = {self._vmodel.ngeoms}")
             self._data = self._model.createData()
             try:
-                # Use 'tool0' as the canonical UR5 end-effector frame
-                self._fee = self._model.getFrameId("tool0")
+                if self.name == 'ur5':
+                    self._fee = self._model.getFrameId("tool0")
+                if self.name == 'ur10':
+                    self._fee = self._model.getFrameId("ee_link")
             except Exception as e:
                 raise RuntimeError(
                     "Failed to resolve end-effector frame 'tool0' in the URDF model."

@@ -1,49 +1,57 @@
 import numpy as np
 import plotly.graph_objects as go
-import plotly.io as pio
 import plotly.express as px
 from plotly.subplots import make_subplots
-from pathlib import Path
-import webbrowser
+import matplotlib.pyplot as plt
 
-# Configure default renderer for Jupyter notebooks with MathJax support
-pio.renderers.default = "notebook"
 
 class Plotter:
     def __init__(self, template: str = "ggplot2"):
         self.template = template
 
-    def joints(self, t: np.ndarray, *q_series: np.ndarray, labels: list = None, title: str = "Joint Angles", name : str = "q", unit: str = "rad", lower_bounds: np.ndarray = None, upper_bounds: np.ndarray = None):
-        """
-        Plot joint data over time for one or more simulations.
-        
-        Args:
-            t: Array of shape (N,) containing time
-            *q_series: One or more arrays of shape (n_joints, N) containing joint data.
-            labels: List of labels for each series.
-            title: Plot title
-            name: Symbolic name for the variable (e.g., 'q').
-            unit: Unit of the variable.
-            lower_bounds: Optional array of shape (n_joints,) for lower boundary lines.
-            upper_bounds: Optional array of shape (n_joints,) for upper boundary lines.
-        """
+    def joints(
+        self,
+        t: np.ndarray,
+        *q_series: np.ndarray,
+        labels: list = None,
+        title: str = "Joint Velocities",
+        name: str = "q",
+        unit: str = "rad/s",
+        lower_bounds: np.ndarray = None,
+        upper_bounds: np.ndarray = None,
+    ):
         if not q_series:
             return go.Figure().update_layout(template=self.template)
 
+        t = np.atleast_1d(np.squeeze(t))
         num_joints = q_series[0].shape[0]
 
+        # --- Build figure first (template defines the default colorway used by generic_plot) ---
         fig = make_subplots(
             rows=num_joints, cols=1,
             shared_xaxes=True,
             vertical_spacing=0.02
         )
+        fig.update_layout(template=self.template)
 
-        colors = px.colors.qualitative.Plotly
-        
+        # --- Use SAME palette as generic_plot (i.e., template colorway) ---
+        colorway = None
+        # 1) from template if available
+        if fig.layout.template is not None and fig.layout.template.layout is not None:
+            colorway = fig.layout.template.layout.colorway
+        # 2) fallback
+        if not colorway:
+            colorway = px.colors.qualitative.Plotly
+
+        if labels is None:
+            labels = [f"Sim {k+1}" for k in range(len(q_series))]
+
+        color_map = {lab: colorway[k % len(colorway)] for k, lab in enumerate(labels)}
+
         for i in range(num_joints):
+            # --- main series (forced color per label => no swapping across subplots) ---
             for j, q in enumerate(q_series):
-                label = labels[j] if labels and j < len(labels) else f"Sim {j+1}"
-                color = colors[j % len(colors)]
+                label = labels[j] if j < len(labels) else f"Sim {j+1}"
                 fig.add_trace(
                     go.Scatter(
                         x=t,
@@ -51,43 +59,50 @@ class Plotter:
                         mode="lines",
                         name=label,
                         legendgroup=label,
-                        showlegend=(i == 0),
-                        line=dict(color=color)
+                        showlegend=(i == 0)
                     ),
                     row=i + 1, col=1
                 )
-            
-            if upper_bounds is not None and i < len(upper_bounds):
-                fig.add_trace(go.Scatter(
-                    x=t, y=np.atleast_1d(np.full_like(t, upper_bounds[i])),
-                    mode='lines',
-                    line=dict(color='red', dash='dot', width=1.5),
-                    name='Upper Bound',
-                    legendgroup='bounds',
-                    showlegend=(i == 0)
-                ), row=i + 1, col=1)
 
-            if lower_bounds is not None and i < len(lower_bounds):
-                fig.add_trace(go.Scatter(
-                    x=t, y=np.atleast_1d(np.full_like(t, lower_bounds[i])),
-                    mode='lines',
-                    line=dict(color='red', dash='dot', width=1.5),
-                    name='Lower Bound',
-                    legendgroup='bounds',
-                    showlegend=(i == 0)
-                ), row=i + 1, col=1)
+            # --- bounds (added AFTER series so they stay on top) ---
+            if upper_bounds is not None and i < len(upper_bounds) and upper_bounds[i] is not None:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t,
+                        y=np.full_like(t, upper_bounds[i], dtype=float),
+                        mode="lines",
+                        name="Upper Bound",
+                        legendgroup="bounds",
+                        showlegend=(i == 0),
+                        line=dict(color="red", dash="dot", width=2.5),
+                    ),
+                    row=i + 1, col=1
+                )
 
-            fig.update_yaxes(title_text=f"${name}_{{{i+1}}} \\ [\\text{{{unit}}}]$", row=i + 1, col=1)
+            if lower_bounds is not None and i < len(lower_bounds) and lower_bounds[i] is not None:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t,
+                        y=np.full_like(t, lower_bounds[i], dtype=float),
+                        mode="lines",
+                        name="Lower Bound",
+                        legendgroup="bounds",
+                        showlegend=(i == 0),
+                        line=dict(color="red", dash="dot", width=2.5),
+                    ),
+                    row=i + 1, col=1
+                )
+
+            fig.update_yaxes(title_text=f"${name}_{{{i+1}}}$ [{unit}]", row=i + 1, col=1)
 
         fig.update_xaxes(title_text="$t \\ [\\text{s}]$", row=num_joints, col=1)
         fig.update_layout(
             title=title,
-            template=self.template,
             height=100 * num_joints + 60,
             margin=dict(l=50, r=20, t=40, b=40),
         )
-
         return fig
+
 
     def generic_plot(
         self,
@@ -118,21 +133,47 @@ class Plotter:
             upper_bound: Optional upper boundary line (scalar)
         """
         fig = go.Figure()
+        fig.update_layout(template=self.template)   # <<< FONDAMENTALE
         x = np.atleast_1d(np.squeeze(x))
 
-        # Plot main series
+        # --- palette coerente col template ---
+        # --- palette coerente col template ---
+        colorway = None
+        if fig.layout.template is not None and fig.layout.template.layout is not None:
+            colorway = fig.layout.template.layout.colorway
+
+        # estendi se troppo corta
+        if colorway and len(colorway) == 5:
+            colorway = list(colorway) + ["#FF9F00"]
+
+        # labels robusto (None o [])
+        if not labels:
+            labels = [f"$S_{{{i+1}}}$" for i in range(len(y_series))]
+
+
+        def get_color(i):
+            return colorway[i % len(colorway)]
+
+
+        # Plot main series (colore fissato per label)
         for i, y in enumerate(y_series):
             y = np.atleast_1d(np.squeeze(y))
-            label = labels[i] if labels and i < len(labels) else f"$S_{{{i+1}}}$"
-            
+            label = labels[i] if i < len(labels) else f"$S_{{{i+1}}}$"
+
             fig.add_trace(
                 go.Scatter(
                     x=x,
                     y=y,
                     mode="lines",
                     name=label,
+                    legendgroup=label,
+                    line=dict(
+                        width=2.5,
+                        color=get_color(i),   # <<< colore per indice
+                    ),
                 )
             )
+
 
         # Add boundary lines if specified
         if lower_bound is not None:
@@ -140,7 +181,7 @@ class Plotter:
                 x=x, 
                 y=np.atleast_1d(np.full_like(x, lower_bound)),
                 mode='lines',
-                line=dict(color='red', dash='dot', width=1.5),
+                line=dict(color='red', dash='dot', width=4.0),
                 name='Lower Bound',
             ))
         
@@ -149,24 +190,51 @@ class Plotter:
                 x=x, 
                 y=np.atleast_1d(np.full_like(x, upper_bound)),
                 mode='lines',
-                line=dict(color='red', dash='dot', width=1.5),
-                name='Upper Bound',
+                line=dict(color='red', dash='dot', width=3.0),
+                name='MPC sampling time',
             ))
 
         fig.update_layout(
-            title=title,
+            title=dict(
+                text=title,
+                font=dict(size=50)   
+            ),
             xaxis=dict(
-                title=xlabel,
+                title=dict(
+                    text=xlabel,
+                    font=dict(size=20)  
+                ),
                 type="log" if xlog else None,
             ),
             yaxis=dict(
-                title=ylabel,
+                title=dict(
+                    text=ylabel,
+                    font=dict(size=20)   
+                ),
                 type="log" if ylog else None,
             ),
             template=self.template,
-            height=280,
-            margin=dict(l=50, r=120, t=40, b=40),
+            colorway=colorwayy,
+            height=800,
+            margin=dict(l=240, r=240, t=60, b=60),
+            legend=dict(
+                font=dict(size=16),
+                itemsizing="constant",
+                itemwidth=30,
+                xanchor="left",
+                yanchor="middle",
+                x=1.02,       
+                y=0.5,         
+                bgcolor="rgba(255,255,255,0.0)", 
+                borderwidth=0,
+            )
+
+
+
+
+
         )
+
 
         return fig
 
@@ -373,7 +441,7 @@ class Plotter:
             margin=dict(l=50, r=20, t=40, b=40),
         )
         return fig
-    
+
 
     def gen_html_report(
     self,
@@ -535,6 +603,548 @@ class Plotter:
             webbrowser.open(report_path.as_uri())
 
         return str(report_path)
+
+
+    def fig6_computation_time_boxplot_mpl(
+    self,
+    sims_or_results,
+    *,
+    time_source: str = "mpc_time",    
+    sample_time_s: float | None = None,
+    title: str = "",
+    figsize=(10, 4.2),
+    box_width: float | None = None,    
+    box_edge_color: str = "#3566A6",   
+    box_face_color: str = "#3566A6",   
+    median_color: str = "#234776",
+    outlier_edge_color: str = "#234776",
+    outlier_size: float = 6.5,
+):
+        """
+        Paper-like Fig.6 (MATPLOTLIB): one box per horizon length (Ts*N),
+        log-scale y, Tukey whiskers (whis=1.5), hollow outliers drawn by matplotlib.
+
+        Boxes are uniformly spaced along x (categorical positions 1..K),
+        while x-tick labels show the horizon length in seconds (rounded to 3 decimals).
+
+        Returns:
+            fig, ax (matplotlib)
+        """
+        # unwrap results from SimulationManager
+        sims = []
+        for item in sims_or_results:
+            sims.append(item["simulator"] if isinstance(item, dict) and "simulator" in item else item)
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        if len(sims) == 0:
+            return fig, ax
+
+        if sample_time_s is None:
+            sample_time_s = float(sims[0].dt)
+
+        # collect data: one group per horizon length (seconds)
+        horizons = []
+        data = []
+        for sim in sims:
+            h_s = float(sim.dt * sim.prediction_horizon)
+            y = np.asarray(sim.timings[time_source]).ravel().astype(float)
+            y = np.maximum(y, 1e-12)  # avoid zeros for log-scale
+            horizons.append(h_s)
+            data.append(y)
+
+        # sort by horizon
+        order = np.argsort(horizons)
+        horizons = [horizons[i] for i in order]
+        data = [data[i] for i in order]
+
+        # --- UNIFORM x spacing (categorical) ---
+        k = len(horizons)
+        xpos = np.arange(1, k + 1)
+
+        # box width in categorical units
+        if box_width is None:
+            box_width = 0.55
+
+        # --- props (ALL handled by matplotlib.boxplot) ---
+        boxprops = dict(facecolor=box_face_color, edgecolor=box_edge_color, linewidth=1.2, alpha=0.25)
+        whiskerprops = dict(color=box_edge_color, linewidth=1.2)
+        capprops = dict(color=box_edge_color, linewidth=1.2)
+        medianprops = dict(color=median_color, linewidth=1.4)
+
+        # hollow, dark outliers (fliers)
+        flierprops = dict(
+            marker='o',
+            markerfacecolor='none',         
+            markeredgecolor=outlier_edge_color,
+            markersize=outlier_size,
+            linestyle='none',
+            markeredgewidth=0.9,
+            alpha=0.85
+        )
+
+        bp = ax.boxplot(
+            data,
+            positions=xpos,
+            widths=box_width,
+            patch_artist=True,
+            showfliers=True,  
+            whis=1.5,         
+            boxprops=boxprops,
+            whiskerprops=whiskerprops,
+            capprops=capprops,
+            medianprops=medianprops,
+            flierprops=flierprops,
+        )
+
+        # dashed red sample-time line + legend
+        ax.axhline(
+            sample_time_s,
+            color="red",
+            linestyle="--",
+            linewidth=2.5,
+            label="MPC sample time"
+        )
+
+        # axes styling
+        ax.set_yscale("log")
+        ax.set_xlabel("Tested surface instances")
+        ax.set_ylabel("MPC computatio time")
+        if title:
+            ax.set_title(title)
+
+        ax.grid(True, which="major", axis="both", alpha=0.35)
+        ax.grid(True, which="minor", axis="y", alpha=0.15)
+
+        # x ticks: one tick per tested surface instance
+        ax.set_xticks(xpos)
+        ax.set_xticklabels([str(i) for i in xpos])
+
+        # legend: show only the dashed line (avoid box proxy in legend)
+        
+      
+        ax.text(
+            0.02, 0.92,                 
+            "MPC sample time",
+            transform=ax.transAxes,      
+            color="red",
+            fontsize=11,
+            va="top",
+            ha="left"
+        )
+
+        fig.tight_layout()
+        return fig, ax
+
+
+    def error_envelope(
+        self,
+        sims_or_results,
+        *,
+        error_key: str = "e4",          
+        band: str = "std",             
+        k_sigma: float = 1.0,           
+        t_max: float | None = None,     
+        show_individual: int = 0,       
+        title: str = "",
+        xlabel: str = "$t\\ [\\mathrm{s}]$",
+        ylabel: str | None = None,
+    ):
+            """
+            Plot mean error trajectory with variability band across multiple simulations.
+
+            sims_or_results: list of Simulator or list of dicts with key "simulator"
+            error_key: one of 'e1'..'e5'
+            band:
+            - "std": mean ± k_sigma * std
+            - "minmax": [min, max]
+            show_individual: plot up to N individual trajectories with low opacity
+            """
+            # unwrap results (same pattern as fig6_computation_time_boxplot_mpl)
+            sims = []
+            for item in sims_or_results:
+                sims.append(item["simulator"] if isinstance(item, dict) and "simulator" in item else item)
+
+            if len(sims) == 0:
+                return go.Figure()
+
+            # assume same dt; align lengths robustly (truncate to shortest)
+            dt = float(sims[0].dt)
+            e_list = []
+            n_min = None
+
+            for sim in sims:
+                e = np.asarray(sim.errors[error_key]).ravel().astype(float) 
+                n_min = len(e) if n_min is None else min(n_min, len(e))
+                e_list.append(e)
+
+            # truncate and stack -> shape (K, T)
+            E = np.vstack([e[:n_min] for e in e_list])
+            t = np.arange(n_min) * dt
+
+            if t_max is not None:
+                n_cut = int(np.floor(t_max / dt))
+                n_cut = max(2, min(n_cut, n_min))
+                t = t[:n_cut]
+                E = E[:, :n_cut]
+
+            mean = np.mean(E, axis=0)
+
+            if band.lower() == "minmax":
+                lo = np.min(E, axis=0)
+                hi = np.max(E, axis=0)
+                band_name = "min–max"
+            elif band.lower() == "std":
+                std = np.std(E, axis=0)
+                lo = mean - k_sigma * std
+                hi = mean + k_sigma * std
+                band_name = f"$\\pm {k_sigma:.1f}\\sigma$"
+            else:
+                raise ValueError("band must be 'std' or 'minmax'")
+
+            if ylabel is None:
+                ylabel = f"${error_key}(t)$"
+
+            fig = go.Figure()
+            fig.update_layout(template=self.template)
+
+            # (optional) individual trajectories in the background
+            if show_individual and show_individual > 0:
+                n_show = min(int(show_individual), E.shape[0])
+                for i in range(n_show):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=t, y=E[i, :],
+                            mode="lines",
+                            line=dict(width=1.5),
+                            opacity=0.25,
+                            name=f"instance {i+1}",
+                            showlegend=False,
+                        )
+                    )
+
+            # band: lower then upper with fill
+            fig.add_trace(
+                go.Scatter(
+                    x=t, y=lo,
+                    mode="lines",
+                    line=dict(width=0),
+                    name=band_name,
+                    showlegend=False,
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=t, y=hi,
+                    mode="lines",
+                    line=dict(width=0),
+                    fill="tonexty",
+                    fillcolor="rgba(53,102,166,0.18)",  # blu trasparente
+                    name=band_name,
+                )
+            )
+
+            # mean line on top
+            fig.add_trace(
+                go.Scatter(
+                    x=t, y=mean,
+                    mode="lines",
+                    line=dict(width=3.0),
+                    name="mean",
+                )
+            )
+
+            fig.update_layout(
+                title=dict(text=title, font=dict(size=40)) if title else None,
+                xaxis=dict(title=dict(text=xlabel, font=dict(size=20))),
+                yaxis=dict(title=dict(text=ylabel, font=dict(size=20))),
+                height=650,
+                margin=dict(l=120, r=120, t=80, b=80),
+                legend=dict(
+                    font=dict(size=16),
+                    xanchor="right",
+                    yanchor="top",
+                    x=0.98,
+                    y=0.98,
+                    bgcolor="rgba(255,255,255,0.0)",
+                    borderwidth=0,
+                )
+            )
+
+            return fig
+
+
+
+
+    def fig6_computation_time_boxplot_mpl(
+    self,
+    sims_or_results,
+    *,
+    time_source: str = "mpc_time",    
+    sample_time_s: float | None = None,
+    title: str = "",
+    figsize=(10, 4.2),
+    box_width: float | None = None,    
+    box_edge_color: str = "#3566A6",   
+    box_face_color: str = "#3566A6",   
+    median_color: str = "#234776",
+    outlier_edge_color: str = "#234776",
+    outlier_size: float = 6.5,
+):
+        """
+        Paper-like Fig.6 (MATPLOTLIB): one box per horizon length (Ts*N),
+        log-scale y, Tukey whiskers (whis=1.5), hollow outliers drawn by matplotlib.
+
+        Boxes are uniformly spaced along x (categorical positions 1..K),
+        while x-tick labels show the horizon length in seconds (rounded to 3 decimals).
+
+        Returns:
+            fig, ax (matplotlib)
+        """
+        # unwrap results from SimulationManager
+        sims = []
+        for item in sims_or_results:
+            sims.append(item["simulator"] if isinstance(item, dict) and "simulator" in item else item)
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        if len(sims) == 0:
+            return fig, ax
+
+        if sample_time_s is None:
+            sample_time_s = float(sims[0].dt)
+
+        # collect data: one group per horizon length (seconds)
+        horizons = []
+        data = []
+        for sim in sims:
+            h_s = float(sim.dt * sim.prediction_horizon)
+            y = np.asarray(sim.timings[time_source]).ravel().astype(float)
+            y = np.maximum(y, 1e-12)  # avoid zeros for log-scale
+            horizons.append(h_s)
+            data.append(y)
+
+        # sort by horizon
+        order = np.argsort(horizons)
+        horizons = [horizons[i] for i in order]
+        data = [data[i] for i in order]
+
+        # --- UNIFORM x spacing (categorical) ---
+        k = len(horizons)
+        xpos = np.arange(1, k + 1)
+
+        # box width in categorical units
+        if box_width is None:
+            box_width = 0.55
+
+        # --- props (ALL handled by matplotlib.boxplot) ---
+        boxprops = dict(facecolor=box_face_color, edgecolor=box_edge_color, linewidth=1.2, alpha=0.25)
+        whiskerprops = dict(color=box_edge_color, linewidth=1.2)
+        capprops = dict(color=box_edge_color, linewidth=1.2)
+        medianprops = dict(color=median_color, linewidth=1.4)
+
+        # hollow, dark outliers (fliers)
+        flierprops = dict(
+            marker='o',
+            markerfacecolor='none',         
+            markeredgecolor=outlier_edge_color,
+            markersize=outlier_size,
+            linestyle='none',
+            markeredgewidth=0.9,
+            alpha=0.85
+        )
+
+        bp = ax.boxplot(
+            data,
+            positions=xpos,
+            widths=box_width,
+            patch_artist=True,
+            showfliers=True,  
+            whis=1.5,         
+            boxprops=boxprops,
+            whiskerprops=whiskerprops,
+            capprops=capprops,
+            medianprops=medianprops,
+            flierprops=flierprops,
+        )
+
+        # dashed red sample-time line + legend
+        ax.axhline(
+            sample_time_s,
+            color="red",
+            linestyle="--",
+            linewidth=2.5,
+            label="MPC sample time"
+        )
+
+        # axes styling
+        ax.set_yscale("log")
+        ax.set_xlabel("Tested surface instances")
+        ax.set_ylabel("MPC computatio time")
+        if title:
+            ax.set_title(title)
+
+        ax.grid(True, which="major", axis="both", alpha=0.35)
+        ax.grid(True, which="minor", axis="y", alpha=0.15)
+
+        # x ticks: one tick per tested surface instance
+        ax.set_xticks(xpos)
+        ax.set_xticklabels([str(i) for i in xpos])
+
+        # legend: show only the dashed line (avoid box proxy in legend)
+        
+      
+        ax.text(
+            0.02, 0.92,                 
+            "MPC sample time",
+            transform=ax.transAxes,      
+            color="red",
+            fontsize=11,
+            va="top",
+            ha="left"
+        )
+
+        fig.tight_layout()
+        return fig, ax
+
+
+    def error_envelope(
+        self,
+        sims_or_results,
+        *,
+        error_key: str = "e4",          
+        band: str = "std",             
+        k_sigma: float = 1.0,           
+        t_max: float | None = None,     
+        show_individual: int = 0,       
+        title: str = "",
+        xlabel: str = "$t\\ [\\mathrm{s}]$",
+        ylabel: str | None = None,
+    ):
+            """
+            Plot mean error trajectory with variability band across multiple simulations.
+
+            sims_or_results: list of Simulator or list of dicts with key "simulator"
+            error_key: one of 'e1'..'e5'
+            band:
+            - "std": mean ± k_sigma * std
+            - "minmax": [min, max]
+            show_individual: plot up to N individual trajectories with low opacity
+            """
+            # unwrap results (same pattern as fig6_computation_time_boxplot_mpl)
+            sims = []
+            for item in sims_or_results:
+                sims.append(item["simulator"] if isinstance(item, dict) and "simulator" in item else item)
+
+            if len(sims) == 0:
+                return go.Figure()
+
+            # assume same dt; align lengths robustly (truncate to shortest)
+            dt = float(sims[0].dt)
+            e_list = []
+            n_min = None
+
+            for sim in sims:
+                e = np.asarray(sim.errors[error_key]).ravel().astype(float) 
+                n_min = len(e) if n_min is None else min(n_min, len(e))
+                e_list.append(e)
+
+            # truncate and stack -> shape (K, T)
+            E = np.vstack([e[:n_min] for e in e_list])
+            t = np.arange(n_min) * dt
+
+            if t_max is not None:
+                n_cut = int(np.floor(t_max / dt))
+                n_cut = max(2, min(n_cut, n_min))
+                t = t[:n_cut]
+                E = E[:, :n_cut]
+
+            mean = np.mean(E, axis=0)
+
+            if band.lower() == "minmax":
+                lo = np.min(E, axis=0)
+                hi = np.max(E, axis=0)
+                band_name = "min–max"
+            elif band.lower() == "std":
+                std = np.std(E, axis=0)
+                lo = mean - k_sigma * std
+                hi = mean + k_sigma * std
+                band_name = f"$\\pm {k_sigma:.1f}\\sigma$"
+            else:
+                raise ValueError("band must be 'std' or 'minmax'")
+
+            if ylabel is None:
+                ylabel = f"${error_key}(t)$"
+
+            fig = go.Figure()
+            fig.update_layout(template=self.template)
+
+            # (optional) individual trajectories in the background
+            if show_individual and show_individual > 0:
+                n_show = min(int(show_individual), E.shape[0])
+                for i in range(n_show):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=t, y=E[i, :],
+                            mode="lines",
+                            line=dict(width=1.5),
+                            opacity=0.25,
+                            name=f"instance {i+1}",
+                            showlegend=False,
+                        )
+                    )
+
+            # band: lower then upper with fill
+            fig.add_trace(
+                go.Scatter(
+                    x=t, y=lo,
+                    mode="lines",
+                    line=dict(width=0),
+                    name=band_name,
+                    showlegend=False,
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=t, y=hi,
+                    mode="lines",
+                    line=dict(width=0),
+                    fill="tonexty",
+                    fillcolor="rgba(53,102,166,0.18)",  # blu trasparente
+                    name=band_name,
+                )
+            )
+
+            # mean line on top
+            fig.add_trace(
+                go.Scatter(
+                    x=t, y=mean,
+                    mode="lines",
+                    line=dict(width=3.0),
+                    name="mean",
+                )
+            )
+
+            fig.update_layout(
+                title=dict(text=title, font=dict(size=40)) if title else None,
+                xaxis=dict(title=dict(text=xlabel, font=dict(size=20))),
+                yaxis=dict(title=dict(text=ylabel, font=dict(size=20))),
+                height=650,
+                margin=dict(l=120, r=120, t=80, b=80),
+                legend=dict(
+                    font=dict(size=16),
+                    xanchor="right",
+                    yanchor="top",
+                    x=0.98,
+                    y=0.98,
+                    bgcolor="rgba(255,255,255,0.0)",
+                    borderwidth=0,
+                )
+            )
+
+            return fig
+
+
 
 
     def show(self, fig: go.Figure, renderer: str = None):

@@ -12,7 +12,7 @@ class Surface:
         self.y = ca.SX.sym("y")
 
         self.coeffs = {
-            'a': -0.1, 'b': 0.1, 'c': -0.01,
+            'a': -0.15, 'b': 0.15, 'c': -0.01,
             'd': 0.01, 'e': 0.01, 'f': 0.0
         }
         if coefficients:
@@ -21,7 +21,7 @@ class Surface:
         self.quadratic_surface = self.coeffs['a']*self.x**2 + self.coeffs['b']*self.y**2 + self.coeffs['c']*self.x*self.y + self.coeffs['d']*self.x + self.coeffs['e']*self.y + self.coeffs['f']
         self._build_surface()
 
-    def _build_surface(self): # |Redundant?|
+    def _build_surface(self): 
         """Build the symbolic surface expression from coefficients."""
         c = self.coeffs
         self.quadratic_surface = (
@@ -112,39 +112,40 @@ class Surface:
         dS_dx = ca.jacobian(self.quadratic_surface, self.x)
         dS_dy = ca.jacobian(self.quadratic_surface, self.y)
 
-        # Unnormalized normal
         nx = dS_dx
         ny = dS_dy
         nz = -1.0
 
-        # Normalize
+
         norm = ca.sqrt(nx**2 + ny**2 + nz**2)
         nx = nx / norm
         ny = ny / norm
         nz = nz / norm
-        # |CORREZZIONE| Il constraint sull'orientamento del task frame va formulato come task constraint
-        #               nella cost function. 
+        
         # Normal vector
         n = ca.vertcat(nx, ny, nz)
+
         # Global X basis
         ex = ca.vertcat(1.0, 0.0, 0.0)
+
         # Project global X onto tangent plane to define local X axis
         ex_proj = ex - (ca.dot(ex, n) * n)
+
         # Normalize local X
         ex_norm = ex_proj / ca.sqrt(ca.dot(ex_proj, ex_proj))
+
         # Local Y axis = n × ex_norm
         ey_norm = ca.cross(n, ex_norm)
+
         # Rotation matrix R (columns are local axes)
         R = ca.hcat([ex_norm, ey_norm, n])
 
         # Extract RPY from rotation matrix assuming XYZ Euler (roll → pitch → yaw)
-        # roll
         roll = ca.atan2(R[2,1], R[2,2])
-        # pitch
         pitch = -ca.asin(R[2,0])
-        # yaw
         yaw = ca.atan2(R[1,0], R[0,0])
         rpy = ca.vertcat(roll, pitch, yaw)
+        
         return ca.Function("surface_rpy", [self.x, self.y], [rpy])
     
     def get_rpy(self, x_surface, y_surface):
