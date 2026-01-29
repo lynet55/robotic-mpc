@@ -12,7 +12,7 @@
 
 ## How to
 
-![](reasources/sim_manager.png)
+![](resources/sim_manager.png)
 
 ## Usage
 Take a look at the examples notebook's, make sure to change the path in the 1st cell.
@@ -77,6 +77,9 @@ See `examples/simple_sim.ipynb` for single runs and `main.py` for full grid sear
 
 ### Real-time feasibility of the MPC controller
 Across all random surface instances, the MPC computation time consistently remains well below the sampling period, confirming suitability for real-time execution.
+
+<br>
+
 ![](resources/mpc_surfaces.png)
 
 
