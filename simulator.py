@@ -658,19 +658,41 @@ class SimulationManager:
 
 
 if __name__ == "__main__":
-    sim0 = Simulator(
-        dt=0.0004,
-        prediction_horizon=200,
-        simulation_time=4000,
-        surface_limits=((-2, 2), (-2, 2)),
-        surface_origin=np.array([0.0, 0.0, 0.0]),
-        surface_orientation_rpy=np.array([0.0, 0.0, 0.0]),
-        qdot_0=np.array([2,2,2,2,2,2]),
-        q_0=np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
-        wcv=np.array([5,10,15,20,25,35]),
-        scene=True
-    )
-    sim0.run()
-    # sim0_solver = sim0.opc_solver.stats
-    # sim0_simulation_results = sim0.simulation_model.stats
-    # print(sim0.benchmark)
+    
+    # Base configuration
+    base_config = {
+        'dt': 0.0005,
+        'simulation_time': 2.0,
+        'prediction_horizon': 100,
+        'surface_limits': ((-2, 2), (-2, 2)),
+        'surface_origin': np.array([0.0, 0.0, 0.0]),
+        'surface_orientation_rpy': np.array([0.0, 0.0, 0.0]),
+        'q_0': np.array([np.pi/3, -np.pi/3, np.pi/4, -np.pi/2, -np.pi/2, 0.0]),
+        'qdot_0': np.array([2, 0, 0, -1, 1, 1]),
+        'wcv': np.array([228.9, 262.09, 517.3, 747.44, 429.9, 1547.76], dtype=float),
+        'q_min': np.array([-2*np.pi, -2*np.pi, -np.pi, -2*np.pi, -2*np.pi, -2*np.pi], dtype=float),
+        'q_max': np.array([+2*np.pi, +2*np.pi, +np.pi, +2*np.pi, +2*np.pi, +2*np.pi], dtype=float),
+        'qdot_min': np.array([-np.pi, -np.pi, -np.pi, -np.pi, -np.pi, -np.pi], dtype=float),
+        'qdot_max': np.array([np.pi, np.pi, np.pi, np.pi, np.pi, np.pi], dtype=float),
+        'scene': True
+    }
+    
+    # Example: Single simulation
+    sim = Simulator(**base_config)
+    sim.run()
+    
+    # Quick summary
+    summary = sim.get_summary()
+    print(f"RMSE: {summary['weighted_rmse']:.4f} | Failures: {summary['num_failures']} | MPC: {summary['avg_mpc_time']*1000:.1f}ms")
+    
+    # Batch simulations
+    manager = SimulationManager(base_config)
+    manager.sweep('prediction_horizon', [50, 100, 200], name_template='H={}')
+    results = manager.run_all()
+    
+    # Compare
+    print(f"\n{'Name':<12} {'RMSE':<10} {'SQP':<8} {'Fail':<6}")
+    print("─" * 36)
+    for r in results:
+        s = r['summary']
+        print(f"{r['name']:<12} {s['weighted_rmse']:<10.4f} {s['total_sqp_iterations']:<8} {s['num_failures']:<6}")

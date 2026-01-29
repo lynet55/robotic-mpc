@@ -152,11 +152,8 @@ class MPC:
         self.ocp.cost.W = W
 
         # Control input bounds (joint velocity commands)
-        q_dot_ref_max = 500.0  # Maximum joint velocity command
-
-        # Control input bounds (joint velocity commands)
-        self.ocp.constraints.lbu = np.array([-q_dot_ref_max] * 6)
-        self.ocp.constraints.ubu = np.array([q_dot_ref_max] * 6)
+        self.ocp.constraints.lbu = dq_min
+        self.ocp.constraints.ubu = dq_max
         self.ocp.constraints.idxbu = np.array([0, 1, 2, 3, 4, 5])
 
         # State input bound (joint rotation)

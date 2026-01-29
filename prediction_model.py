@@ -57,6 +57,65 @@ class SixDofRobot:
 
         self.acados_model, self.y = self._generate_dynamics_model()
 
+    @property
+    def Ad(self):
+        if self._Ad is None:
+            raise RuntimeError("Ad not initialized")
+        return self._Ad
+
+    @property
+    def Bd(self):
+        if self._Bd is None:
+            raise RuntimeError("Bd not initialized")
+        return self._Bd
+
+    @property
+    def Ts(self):
+        return self._Ts
+    
+    @Ts.setter
+    def Ts(self, new_Ts):
+        if new_Ts <= 0:
+            raise ValueError("The sampling time must be positive")
+        if not isinstance(new_Ts, float):
+            raise TypeError(f"Expected type float, got {type(new_Ts).__name__}.")
+        self._Ts = new_Ts
+
+    @property
+    def n_dof(self):
+        return self._n_dof
+    
+
+    def _update_discrete_lti_matrices(self,):
+       
+        nd = self._n_dof
+        w = self._Wcv 
+        Ts = self._Ts
+
+        a22 = np.exp(-w * Ts)             
+        a12 = (1.0 - a22) / w              
+
+        I6 = np.eye(nd, dtype=np.float64)
+
+        A12 = np.diag(a12)               
+        A22 = np.diag(a22)                 
+
+        B2  = np.diag(1.0 - a22)           
+        B1  = Ts * I6 - A12              
+
+        Ad = np.zeros((2*nd, 2*nd), dtype=np.float64)
+        Bd = np.zeros((2*nd,  nd), dtype=np.float64)
+
+        Ad[0:nd, 0:nd]   = I6
+        Ad[0:nd, nd:2*nd]  = A12
+        Ad[nd:2*nd, nd:2*nd] = A22
+
+        Bd[0:nd, :]  = B1
+        Bd[nd:2*nd, :] = B2
+
+        self._Ad = Ad
+        self._Bd = Bd
+
     def _setup_casadi_functions(self):
         """Setup pure CasADi functions for Pinocchio operations"""
         # Create symbolic variables for Pinocchio functions
